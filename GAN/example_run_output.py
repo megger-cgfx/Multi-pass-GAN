@@ -1,14 +1,28 @@
 import os
 
 # 4x multi pass
-if 0:
+if 1:
 	## first nn: test 4
-	os.system('python multipassGAN-4x.py randSeed 174213111 upRes 4 startIndex 0 out 1 pretrain 0 pretrainDisc 0 tileSize 64 trainingIterations 60000 lambda 5.0 lambda2 0.00001 discRuns 2 genRuns 2 alwaysSave 1 fromSim 1005 toSim 1005 outputInterval 200 genTestImg 1 dropout 0.5 dataDim 2 batchSize 16 useVelocities 1 useVorticities 0 useK_Eps_Turb 0 useFlags 0 gif 0 genModel gen_resnet discModel disc_binclass basePath ../2ddata_gan_sliced/ packedSimPath ../data/ lambda_t 1.0 lambda_t_l2 0.0 frame_min 110 frame_max 111 data_fraction 0.01 adv_flag 1 dataAugmentation 1 premadeTiles 0 rot 1 load_model_test 4 load_model_no 1199 sliceMode 1 genUni 1 interpMode 1 upsamplingMode 2 upsampledData 0 velScale 1.0')
+	os.system('python multipassGAN-4x.py randSeed 174213111 upRes 4 startIndex 0 out 1 pretrain 0 pretrainDisc 0 '
+			  'tileSize 64 trainingIterations 60000 lambda 5.0 lambda2 0.00001 discRuns 2 genRuns 2 alwaysSave 1 '
+			  'fromSim 1005 toSim 1005 outputInterval 200 genTestImg 1 dropout 0.5 dataDim 2 batchSize 16 '
+			  'useVelocities 1 useVorticities 0 useK_Eps_Turb 0 useFlags 0 gif 0 genModel gen_resnet '
+			  'discModel disc_binclass basePath ../2ddata_gan_sliced/ packedSimPath ../data/ lambda_t 1.0 '
+			  'lambda_t_l2 0.0 frame_min 110 frame_max 111 data_fraction 0.01 adv_flag 1 dataAugmentation 1 '
+			  'premadeTiles 0 rot 1 load_model_test 4 load_model_no 1199 sliceMode 1 genUni 1 interpMode 1 '
+			  'upsamplingMode 2 upsampledData 0 velScale 1.0')
 	## second nn: test 48
-	os.system('python multipassGAN-4x.py randSeed 174213111 upRes 4 startIndex 0 out 1 pretrain 0 pretrainDisc 0 tileSize 64 trainingIterations 60000 lambda 5.0 lambda2 0.00001 discRuns 2 genRuns 2 alwaysSave 1 fromSim 1005 toSim 1005 outputInterval 200 genTestImg 1 dropout 0.5 dataDim 2 batchSize 16 useVelocities 1 useVorticities 0 useK_Eps_Turb 0 useFlags 0 gif 0 genModel gen_resnet discModel disc_binclass basePath ../2ddata_gan_sliced/ packedSimPath ../data/ lambda_t 1.0 lambda_t_l2 0.0 frame_min 110 frame_max 111 data_fraction 0.01 adv_flag 1 dataAugmentation 1 premadeTiles 0 rot 1 load_model_test 48 load_model_no 799 sliceMode 1 genUni 1 interpMode 1 upsamplingMode 1 upsampledData 1 velScale 1.0')
+	os.system('python multipassGAN-4x.py randSeed 174213111 upRes 4 startIndex 0 out 1 pretrain 0 pretrainDisc 0 '
+			  'tileSize 64 trainingIterations 60000 lambda 5.0 lambda2 0.00001 discRuns 2 genRuns 2 alwaysSave 1 '
+			  'fromSim 1005 toSim 1005 outputInterval 200 genTestImg 1 dropout 0.5 dataDim 2 batchSize 16 '
+			  'useVelocities 1 useVorticities 0 useK_Eps_Turb 0 useFlags 0 gif 0 genModel gen_resnet '
+			  'discModel disc_binclass basePath ../2ddata_gan_sliced/ packedSimPath ../data/ lambda_t 1.0 '
+			  'lambda_t_l2 0.0 frame_min 110 frame_max 111 data_fraction 0.01 adv_flag 1 dataAugmentation 1 '
+			  'premadeTiles 0 rot 1 load_model_test 48 load_model_no 799 sliceMode 1 genUni 1 interpMode 1 '
+			  'upsamplingMode 1 upsampledData 1 velScale 1.0')
 
 # 8x multi pass
-if 1:
+if 0:
 	## first nn: test 59
 	## second nn: test 409
 	sim_no = 3006

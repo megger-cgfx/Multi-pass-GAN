@@ -15,13 +15,17 @@ import tensorflow as tf
 import numpy as np
 import gc 
 # load manta tools
-sys.path.append("../tools")
+toolspath = os.path.join(__file__, "../../tools_wscale")
+print("\n\n\nTOOLS PATH: \n", toolspath, "\n\n")
+sys.path.append(toolspath)
+print("\n".join(sys.path))
 import tilecreator_t as tc
 import uniio
 import paramhelpers as ph
 from GAN import GAN, lrelu
 import fluiddataloader as FDL
 import scipy
+import scipy.ndimage
 
 os.environ["CUDA_DEVICE_ORDER"]="PCI_BUS_ID"
 os.environ["CUDA_VISIBLE_DEVICES"]="0"
@@ -167,7 +171,7 @@ if toSim==-1:
 channelLayout_low = 'd'
 channelLayout_high = 'd'
 
-lowfilename = "density_low_%04d.uni"
+lowfilename = "density_low_%04d.npz"
 '''
  upsampling mode
  0: lin interp after first network - second network "upsampling" z-axis,
@@ -178,13 +182,13 @@ lowfilename = "density_low_%04d.uni"
 
 if upsampled_data:
 	if upsampling_mode == 1:
-	    lowfilename_2 = "density_low_2x2_%04d.uni"
+		lowfilename_2 = "density_low_2x2_%04d.npz"
 	elif upsampling_mode == 0:
-	    lowfilename_2 = "density_low_2x2x1_%04d.uni"
+		lowfilename_2 = "density_low_2x2x1_%04d.npz"
 	elif upsampling_mode == 3:
-		lowfilename_2 = "density_low_1x1_%04d.uni"
-	
-highfilename = "density_high_%04d.uni"
+		lowfilename_2 = "density_low_1x1_%04d.npz"
+
+highfilename = "density_high_%04d.npz"
 mfl = ["density"]
 mfh = ["density"]
 
@@ -210,12 +214,24 @@ if (outputOnly):
 	useDataAugmentation = 0
 
 if ((not useTempoD) and (not useTempoL2)): # should use the full sequence, not use multi_files
-	tiCr = tc.TileCreator(tileSizeLow=tileSizeLow, simSizeLow=simSizeLow , dim =dataDimension, dim_t = 1, channelLayout_low = channelLayout_low, upres=upRes, premadeTiles=premadeTiles, channelLayout_high = channelLayout_high)
-	floader = FDL.FluidDataLoader( print_info=1, base_path=packedSimPath, base_path_y = packedSimPath, numpy_seed = randSeed ,filename=lowfilename, filename_index_min = frame_min, oldNamingScheme=False, filename_y=None, filename_index_max=frame_max, indices=dirIDs, data_fraction=data_fraction, multi_file_list=mfl, multi_file_list_y=mfh)
+	tiCr = tc.TileCreator(
+		tileSizeLow=tileSizeLow, simSizeLow=simSizeLow , dim =dataDimension, dim_t = 1,
+		channelLayout_low = channelLayout_low, upres=upRes, premadeTiles=premadeTiles,
+		channelLayout_high = channelLayout_high
+	)
+	floader = FDL.FluidDataLoader(
+		print_info=1, base_path=packedSimPath, base_path_y = packedSimPath, numpy_seed = randSeed, filename=lowfilename,
+		filename_index_min = frame_min, oldNamingScheme=False, filename_y=None, filename_index_max=frame_max,
+		indices=dirIDs, data_fraction=data_fraction, multi_file_list=mfl, multi_file_list_y=mfh
+	)
 	if upsampled_data:
 		mfl_2 = ["density"]
 		mfh_2 = mfl_2
-		floader_2 = FDL.FluidDataLoader( print_info=1, base_path=packedSimPath, numpy_seed = randSeed, filename=lowfilename_2, filename_index_min = frame_min, oldNamingScheme=False, filename_index_max=frame_max, indices=dirIDs, data_fraction=data_fraction, multi_file_list=mfl_2)
+		floader_2 = FDL.FluidDataLoader(
+			print_info=1, base_path=packedSimPath, numpy_seed = randSeed, filename=lowfilename_2,
+			filename_index_min = frame_min, oldNamingScheme=False, filename_index_max=frame_max,
+			indices=dirIDs, data_fraction=data_fraction, multi_file_list=mfl_2
+		)
 else:		
 	lowparalen = len(mfl)
 	highparalen = len(mfh)
@@ -229,11 +245,22 @@ else:
 	moh = np.append(np.zeros(highparalen), np.ones(highparalen))
 	moh = np.append(moh, np.ones(highparalen)*2)
 	if upsampling_mode == 2:
-		tiCr = tc.TileCreator(tileSizeLow=tileSizeLow, densityMinimum=0.005, channelLayout_high=channelLayout_high, simSizeLow=simSizeLow , dim =dataDimension, dim_t = 3, channelLayout_low = channelLayout_low, upres=upRes, premadeTiles=premadeTiles)
+		tiCr = tc.TileCreator(
+			tileSizeLow=tileSizeLow, densityMinimum=0.005, channelLayout_high=channelLayout_high, simSizeLow=simSizeLow,
+			dim =dataDimension, dim_t = 3, channelLayout_low = channelLayout_low, upres=upRes, premadeTiles=premadeTiles
+		)
 	elif upsampling_mode == 1 or upsampling_mode == 3:
-		tiCr = tc.TileCreator(tileSizeLow=tileSizeLow * upRes, densityMinimum=0.005, channelLayout_high=channelLayout_high, simSizeLow=simSizeLow * upRes , dim =dataDimension, dim_t = 3, channelLayout_low = channelLayout_low, upres=1, premadeTiles=premadeTiles)
+		tiCr = tc.TileCreator(
+			tileSizeLow=tileSizeLow * upRes, densityMinimum=0.005, channelLayout_high=channelLayout_high,
+			simSizeLow=simSizeLow * upRes , dim =dataDimension, dim_t = 3, channelLayout_low = channelLayout_low,
+			upres=1, premadeTiles=premadeTiles
+		)
 	elif upsampling_mode == 0:
-		tiCr = tc.TileCreator(tileSizeLow=[tileSizeHigh, tileSizeLow], densityMinimum=0.005, channelLayout_high=channelLayout_high, simSizeLow=[simSizeHigh, simSizeLow] , dim =dataDimension, dim_t = 3, channelLayout_low = channelLayout_low, upres=[1,upRes], premadeTiles=premadeTiles)
+		tiCr = tc.TileCreator(
+			tileSizeLow=[tileSizeHigh, tileSizeLow], densityMinimum=0.005, channelLayout_high=channelLayout_high,
+			simSizeLow=[simSizeHigh, simSizeLow] , dim =dataDimension, dim_t = 3, channelLayout_low = channelLayout_low,
+			upres=[1,upRes], premadeTiles=premadeTiles
+		)
 	if upsampling_mode == 1 or upsampling_mode == 3:
 		scale_y = [1,1,1,1]
 		scale = [upRes,upRes,upRes,1]
@@ -258,9 +285,21 @@ else:
 		mfl_2= np.append(mfl_tempo_2, mfl_2)
 		mol_2 = np.append(np.zeros(lowparalen_2), np.ones(lowparalen_2))
 		mol_2 = np.append(mol_2, np.ones(lowparalen_2)*2)		
-		floader_2 = FDL.FluidDataLoader( print_info=0, base_path=packedSimPath, base_path_y = path_2, numpy_seed = randSeed, conv_slices = True, conv_axis = transpose_axis, select_random = 0.1, density_threshold = 0.002, axis_scaling_y = scale_y, axis_scaling = scale, filename=lowfilename, oldNamingScheme=False, filename_y=lowfilename_2, filename_index_max=frame_max,filename_index_min = frame_min, indices=dirIDs, data_fraction=data_fraction, multi_file_list=mfl_2, multi_file_idxOff=mol_2, multi_file_list_y=mfh , multi_file_idxOff_y=moh) # data_fraction=0.1
+		floader_2 = FDL.FluidDataLoader(
+			print_info=0, base_path=packedSimPath, base_path_y = path_2, numpy_seed = randSeed, conv_slices = True,
+			conv_axis = transpose_axis, select_random = 0.1, density_threshold = 0.002, axis_scaling_y = scale_y,
+			axis_scaling = scale, filename=lowfilename, oldNamingScheme=False, filename_y=lowfilename_2,
+			filename_index_max=frame_max,filename_index_min = frame_min, indices=dirIDs, data_fraction=data_fraction,
+			multi_file_list=mfl_2, multi_file_idxOff=mol_2, multi_file_list_y=mfh , multi_file_idxOff_y=moh
+		)  # data_fraction=0.1
 		print('loaded low_res')
-	floader = FDL.FluidDataLoader( print_info=0, base_path=packedSimPath, base_path_y = packedSimPath, numpy_seed = randSeed, conv_slices = True, conv_axis = transpose_axis, select_random = 0.1, density_threshold = 0.002, axis_scaling_y = scale_y, axis_scaling = scale, filename=lowfilename, oldNamingScheme=False, filename_y=highfilename, filename_index_max=frame_max,filename_index_min = frame_min, indices=dirIDs, data_fraction=data_fraction, multi_file_list=mfl, multi_file_idxOff=mol, multi_file_list_y=mfh , multi_file_idxOff_y=moh) # data_fraction=0.1
+	floader = FDL.FluidDataLoader(
+		print_info=0, base_path=packedSimPath, base_path_y = packedSimPath, numpy_seed = randSeed, conv_slices = True,
+		conv_axis = transpose_axis, select_random = 0.1, density_threshold = 0.002, axis_scaling_y = scale_y,
+		axis_scaling = scale, filename=lowfilename, oldNamingScheme=False, filename_y=highfilename,
+		filename_index_max=frame_max,filename_index_min = frame_min, indices=dirIDs, data_fraction=data_fraction,
+		multi_file_list=mfl, multi_file_idxOff=mol, multi_file_list_y=mfh , multi_file_idxOff_y=moh
+	)  # data_fraction=0.1
 
 if useDataAugmentation:
 	tiCr.initDataAugmentation(rot=rot, minScale=minScale, maxScale=maxScale ,flip=flip)
@@ -473,7 +512,10 @@ def setVelZeroArea(batch_s, size_batch):
 	
 	return batch_s
 	
-def getTempoinput(batch_size = 1, isTraining = True, useDataAugmentation = False, useVelocities = False, useVorticities = False, n_t = 3, dt=0.5, useFlags = False, useK_Eps_Turb = False):
+def getTempoinput(
+		batch_size = 1, isTraining = True, useDataAugmentation = False, useVelocities = False, useVorticities = False,
+		n_t = 3, dt=0.5, useFlags = False, useK_Eps_Turb = False
+):
 	batch_xts, batch_yts, batch_y_pos = tiCr.selectRandomTempoTiles(batch_size, isTraining, useDataAugmentation, n_t, dt)
 	real_batch_sz = batch_xts.shape[0]
 	if( dataDimension == 2):
@@ -1014,7 +1056,10 @@ def modifyVel(Dens,Vel):
 						pass
 	return velout
 
-def getinput(index = 1, randomtile = True, isTraining = True, batch_size = 1, useDataAugmentation = False, modifyvelocity = False, useVelocities = False, useVorticities = False, useFlags = False, useK_Eps_Turb = False):
+def getinput(
+		index = 1, randomtile = True, isTraining = True, batch_size = 1, useDataAugmentation = False,
+		modifyvelocity = False, useVelocities = False, useVorticities = False, useFlags = False, useK_Eps_Turb = False
+):
 	if randomtile == False:
 		batch_xs, batch_ys = tiCr.getFrameTiles(index) # TODO 120 is hard coded!!
 	else:
@@ -1052,7 +1097,11 @@ def generateTestImage(sim_no = fromSim, frame_no = 0, outPath = test_path,imagei
 		#todo output for premadetiles
 		pass
 	else:
-		batch_xs, batch_ys = getinput(randomtile = False, index = (sim_no-fromSim)*frame_max + frame_no, modifyvelocity = modifyvelocity, useVelocities = useVelocities, useVorticities = useVorticities,  useFlags = useFlags, useK_Eps_Turb = useK_Eps_Turb)
+		batch_xs, batch_ys = getinput(
+			randomtile = False, index = (sim_no-fromSim)*frame_max + frame_no, modifyvelocity = modifyvelocity,
+			useVelocities = useVelocities, useVorticities = useVorticities,  useFlags = useFlags,
+			useK_Eps_Turb = useK_Eps_Turb
+		)
 		if upsampling_mode == 2:
 			batch_xtsT = np.reshape(batch_xs, (-1,1,tileSizeLow,tileSizeLow,n_inputChannels))
 		elif upsampling_mode == 1 or upsampling_mode == 3:
@@ -1110,7 +1159,7 @@ def generate3DUniForNewNetwork(imageindex = 0, outPath = '../', ):
 		batch_xs_in[:,:,:,1:2] = np.copy(batch_xs_in[:,:,:,3:4])
 		batch_xs_in[:,:,:,3:4] = np.copy(temp_vel)		
 	elif upsampling_mode == 1 :
-		batch_xs_in = np.reshape(np.concatenate((x_2[imageindex],batch_xs_tile), axis = 3), [-1, simSizeHigh, simSizeHigh, simSizeHigh, n_inputChannels]).transpose((0,3,1,2,4)).reshape(([-1, simSizeHigh, simSizeHigh, n_inputChannels]))
+		batch_xs_in = np.reshape(np.concatenate((x_2[imageindex],batch_xs_tile), axis = 3),[-1, simSizeHigh, simSizeHigh, simSizeHigh, n_inputChannels]).transpose((0,3,1,2,4)).reshape(([-1, simSizeHigh, simSizeHigh, n_inputChannels]))
 		temp_vel = np.copy(batch_xs_in[:,:,:,2:3])
 		batch_xs_in[:,:,:,2:3] = np.copy(batch_xs_in[:,:,:,3:4])
 		batch_xs_in[:,:,:,3:4] = np.copy(temp_vel)
@@ -1147,7 +1196,7 @@ def generate3DUniForNewNetwork(imageindex = 0, outPath = '../', ):
 		
 	end = time.time()
 	print(end-start)
-	head, _ = uniio.readUni(packedSimPath + "sim_%04d/density_low_%04d.uni"%(fromSim,imageindex+frame_min))
+	head, _ = uniio.readUni(packedSimPath + "sim_%04d/density_low_%04d.npz"%(fromSim,imageindex+frame_min))
 	head['dimX'] = simSizeHigh
 	head['dimX'] = simSizeHigh
 	head['dimY'] = simSizeHigh
@@ -1157,15 +1206,15 @@ def generate3DUniForNewNetwork(imageindex = 0, outPath = '../', ):
 		dim_output[cond_out] = 0
 		if upsampling_mode == 2:
 			if upsampleFirst:
-				uniio.writeUni(packedSimPath + '/sim_%04d/density_low_2x2_%04d.uni'%(fromSim,  imageindex+frame_min), head, dim_output)
+				uniio.writeUni(packedSimPath + '/sim_%04d/density_low_2x2_%04d.npz'%(fromSim,  imageindex+frame_min), head, dim_output)
 			else:
-				uniio.writeUni(packedSimPath + '/sim_%04d/density_low_2x2x1_%04d.uni'%(fromSim, imageindex+frame_min), head, dim_output)
+				uniio.writeUni(packedSimPath + '/sim_%04d/density_low_2x2x1_%04d.npz'%(fromSim, imageindex+frame_min), head, dim_output)
 		elif upsampling_mode == 1:
-			uniio.writeUni(packedSimPath + '/sim_%04d/density_low_1x1_%04d.uni'%(fromSim, imageindex+frame_min), head, dim_output)
+			uniio.writeUni(packedSimPath + '/sim_%04d/density_low_1x1_%04d.npz'%(fromSim, imageindex+frame_min), head, dim_output)
 		elif upsampling_mode == 0:
-			uniio.writeUni(packedSimPath + '/sim_%04d/density_low_1x1x1_%04d.uni'%(fromSim, imageindex+frame_min), head, dim_output)
+			uniio.writeUni(packedSimPath + '/sim_%04d/density_low_1x1x1_%04d.npz'%(fromSim, imageindex+frame_min), head, dim_output)
 		elif upsampling_mode == 3:
-			uniio.writeUni(packedSimPath + '/sim_%04d/density_low_0x0_%04d.uni'%(fromSim, imageindex+frame_min), head, dim_output)
+			uniio.writeUni(packedSimPath + '/sim_%04d/density_low_0x0_%04d.npz'%(fromSim, imageindex+frame_min), head, dim_output)
 	print('')
 	
 def saveModel(cost, exampleOut=-1, imgPath = test_path):
@@ -1251,15 +1300,44 @@ if not outputOnly and trainGAN:
 				floader = []
 				gc.collect()
 				if upsampling_mode == 2:
-					tiCr = tc.TileCreator(tileSizeLow=tileSizeLow, densityMinimum=0.0, channelLayout_high=channelLayout_high, simSizeLow=simSizeLow , dim =dataDimension, dim_t = 3, channelLayout_low = channelLayout_low, upres=upRes, premadeTiles=premadeTiles)
+					tiCr = tc.TileCreator(
+						tileSizeLow=tileSizeLow, densityMinimum=0.0, channelLayout_high=channelLayout_high,
+						simSizeLow=simSizeLow , dim =dataDimension, dim_t = 3, channelLayout_low = channelLayout_low,
+						upres=upRes, premadeTiles=premadeTiles
+					)
 				elif upsampling_mode == 1 or upsampling_mode == 3:
-					tiCr = tc.TileCreator(tileSizeLow=tileSizeLow * upRes, densityMinimum=0.0, channelLayout_high=channelLayout_high, simSizeLow=simSizeLow * upRes , dim =dataDimension, dim_t = 3, channelLayout_low = channelLayout_low, upres=1, premadeTiles=premadeTiles)
+					tiCr = tc.TileCreator(
+						tileSizeLow=tileSizeLow * upRes, densityMinimum=0.0, channelLayout_high=channelLayout_high,
+						simSizeLow=simSizeLow * upRes , dim =dataDimension, dim_t = 3,
+						channelLayout_low = channelLayout_low, upres=1, premadeTiles=premadeTiles
+					)
 				elif upsampling_mode == 0:
-					tiCr = tc.TileCreator(tileSizeLow=[tileSizeHigh, tileSizeLow], densityMinimum=0.0, channelLayout_high=channelLayout_high, simSizeLow=[simSizeHigh, simSizeLow] , dim =dataDimension, dim_t = 3, channelLayout_low = channelLayout_low, upres=[1,4], premadeTiles=premadeTiles)
+					tiCr = tc.TileCreator(
+						tileSizeLow=[tileSizeHigh, tileSizeLow], densityMinimum=0.0,
+						channelLayout_high=channelLayout_high, simSizeLow=[simSizeHigh, simSizeLow],
+						dim =dataDimension, dim_t = 3, channelLayout_low = channelLayout_low, upres=[1,4],
+						premadeTiles=premadeTiles
+					)
 				# hard coded so far
 				if upsampled_data:
-					floader_2 = FDL.FluidDataLoader( print_info=0, base_path=packedSimPath, base_path_y = path_2, numpy_seed = randSeed, conv_slices = True, conv_axis = transpose_axis, select_random = 0.1, density_threshold = 0.002, axis_scaling_y = scale_y, axis_scaling = scale, filename=lowfilename, oldNamingScheme=False, filename_y=lowfilename_2, filename_index_max=frame_max + stride * (epoch // load_new_data_after),filename_index_min = frame_min + stride * (epoch // load_new_data_after), indices=dirIDs, data_fraction=data_fraction, multi_file_list=mfl_2, multi_file_idxOff=mol_2, multi_file_list_y=mfh , multi_file_idxOff_y=moh) # data_fraction=0.1
-				floader = FDL.FluidDataLoader( print_info=0, base_path=packedSimPath, base_path_y = packedSimPath, numpy_seed = randSeed, conv_slices = True, conv_axis = transpose_axis, select_random = 0.1, density_threshold = 0.002, axis_scaling_y = scale_y, axis_scaling = scale, filename=lowfilename, oldNamingScheme=False, filename_y=highfilename, filename_index_max=frame_max + stride * (epoch // load_new_data_after),filename_index_min = frame_min + stride * (epoch // load_new_data_after) , indices=dirIDs, data_fraction=data_fraction, multi_file_list=mfl, multi_file_idxOff=mol, multi_file_list_y=mfh , multi_file_idxOff_y=moh) # data_fraction=0.1
+					floader_2 = FDL.FluidDataLoader(
+						print_info=0, base_path=packedSimPath, base_path_y = path_2, numpy_seed = randSeed,
+						conv_slices = True, conv_axis = transpose_axis, select_random = 0.1, density_threshold = 0.002,
+						axis_scaling_y = scale_y, axis_scaling = scale, filename=lowfilename, oldNamingScheme=False,
+						filename_y=lowfilename_2, filename_index_max=frame_max + stride * (epoch // load_new_data_after),
+						filename_index_min = frame_min + stride * (epoch // load_new_data_after), indices=dirIDs,
+						data_fraction=data_fraction, multi_file_list=mfl_2, multi_file_idxOff=mol_2,
+						multi_file_list_y=mfh, multi_file_idxOff_y=moh
+					) # data_fraction=0.1
+				floader = FDL.FluidDataLoader(
+					print_info=0, base_path=packedSimPath, base_path_y = packedSimPath, numpy_seed = randSeed,
+					conv_slices = True, conv_axis = transpose_axis, select_random = 0.1, density_threshold = 0.002,
+					axis_scaling_y = scale_y, axis_scaling = scale, filename=lowfilename, oldNamingScheme=False,
+					filename_y=highfilename, filename_index_max=frame_max + stride * (epoch // load_new_data_after),
+					filename_index_min = frame_min + stride * (epoch // load_new_data_after) , indices=dirIDs,
+					data_fraction=data_fraction, multi_file_list=mfl, multi_file_idxOff=mol, multi_file_list_y=mfh,
+					multi_file_idxOff_y=moh
+				) # data_fraction=0.1
 				print('loaded different files')
 				if useDataAugmentation:
 					tiCr.initDataAugmentation(rot=rot, minScale=minScale, maxScale=maxScale ,flip=flip)
@@ -1317,8 +1395,16 @@ if not outputOnly and trainGAN:
 			#discriminator variables; with real and generated input
 			if use_spatialdisc:
 				for runs in range(discRuns):
-					batch_xs, batch_ys = getinput(batch_size = batch_size_disc, useDataAugmentation = useDataAugmentation, useVelocities = useVelocities, useVorticities = useVorticities,  useFlags = useFlags, useK_Eps_Turb = useK_Eps_Turb)
-					_, disc_cost, summary,disc_sig,gen_sig = sess.run([disc_optimizer, disc_loss, lossTrain_disc,disc_sigmoid,gen_sigmoid], feed_dict={x: batch_xs, x_disc: batch_xs, y: batch_ys, keep_prob: dropout, train: True, lr_global_step: lrgs}     , options=run_options, run_metadata=run_metadata )
+					batch_xs, batch_ys = getinput(
+						batch_size = batch_size_disc, useDataAugmentation = useDataAugmentation,
+						useVelocities = useVelocities, useVorticities = useVorticities,  useFlags = useFlags,
+						useK_Eps_Turb = useK_Eps_Turb
+					)
+					_, disc_cost, summary,disc_sig,gen_sig = sess.run(
+						[disc_optimizer, disc_loss, lossTrain_disc,disc_sigmoid,gen_sigmoid],
+						feed_dict={x: batch_xs, x_disc: batch_xs, y: batch_ys, keep_prob: dropout, train: True, lr_global_step: lrgs},
+						options=run_options, run_metadata=run_metadata
+					)
 					avgCost_disc += disc_cost
 					summary_writer.add_summary(summary, epoch)
 					if saveMD: summary_writer.add_run_metadata(run_metadata, 'dstep%d' % epoch)
@@ -1326,7 +1412,11 @@ if not outputOnly and trainGAN:
 			# temporal discriminator
 			if(useTempoD):
 				for runs in range(discRuns):
-						batch_xts, batch_yts, batch_y_pos = getTempoinput(batch_size_disc, n_t = 3, dt=0.5, useVelocities = useVelocities, useVorticities = useVorticities, useDataAugmentation = useDataAugmentation, useFlags = useFlags, useK_Eps_Turb = useK_Eps_Turb)
+						batch_xts, batch_yts, batch_y_pos = getTempoinput(
+							batch_size_disc, n_t = 3, dt=0.5, useVelocities = useVelocities,
+							useVorticities = useVorticities, useDataAugmentation = useDataAugmentation,
+							useFlags = useFlags, useK_Eps_Turb = useK_Eps_Turb
+						)
 						
 						dict_train = {x_t:batch_xts, y_t:batch_yts, keep_prob: dropout, train: True}
 						if(ADV_flag): dict_train[y_pos] = batch_y_pos
@@ -1337,7 +1427,11 @@ if not outputOnly and trainGAN:
 					
 			#generator variables
 			for runs in range(genRuns):
-				batch_xs, batch_ys = getinput(batch_size = batch_size_disc, useDataAugmentation = useDataAugmentation, useVelocities = useVelocities, useVorticities = useVorticities,  useFlags = useFlags, useK_Eps_Turb = useK_Eps_Turb)
+				batch_xs, batch_ys = getinput(
+					batch_size = batch_size_disc, useDataAugmentation = useDataAugmentation,
+					useVelocities = useVelocities, useVorticities = useVorticities,
+					useFlags = useFlags, useK_Eps_Turb = useK_Eps_Turb
+				)
 				
 				kkin = k_f*kkin
 				kk2in = k2_f*kk2in
@@ -1351,7 +1445,10 @@ if not outputOnly and trainGAN:
 					getlist = [gen_optimizer, gen_l1_loss, gen_l2_loss]
 				if(useTempoD or useTempoL2):
 					
-					batch_xts, batch_yts, batch_y_pos = getTempoinput(batch_size_disc, n_t = 3, dt=0.5, useVelocities = useVelocities, useVorticities = useVorticities, useDataAugmentation = useDataAugmentation, useFlags = useFlags, useK_Eps_Turb = useK_Eps_Turb)
+					batch_xts, batch_yts, batch_y_pos = getTempoinput(
+						batch_size_disc, n_t = 3, dt=0.5, useVelocities = useVelocities, useVorticities = useVorticities,
+						useDataAugmentation = useDataAugmentation, useFlags = useFlags, useK_Eps_Turb = useK_Eps_Turb
+					)
 					train_dict[x_t] = batch_xts
 					if(ADV_flag):
 						train_dict[y_pos] = batch_y_pos
@@ -1412,9 +1509,15 @@ if not outputOnly and trainGAN:
 				if use_spatialdisc:
 					# gather statistics from training
 					# not yet part of testing!
-						batch_xs, batch_ys = getinput(batch_size = numTests, useVelocities = useVelocities, useVorticities = useVorticities,  useFlags = useFlags, useK_Eps_Turb = useK_Eps_Turb)
+						batch_xs, batch_ys = getinput(
+							batch_size = numTests, useVelocities = useVelocities, useVorticities = useVorticities,
+							useFlags = useFlags, useK_Eps_Turb = useK_Eps_Turb
+						)
 					
-						disc_out, summary_disc_out, gen_out, summary_gen_out = sess.run([disc_sigmoid, outTrain_disc_real, gen_sigmoid, outTrain_disc_gen], feed_dict={x: batch_xs, x_disc: batch_xs, y: batch_ys, keep_prob: dropout, train: False})
+						disc_out, summary_disc_out, gen_out, summary_gen_out = sess.run(
+							[disc_sigmoid, outTrain_disc_real, gen_sigmoid, outTrain_disc_gen],
+							feed_dict={x: batch_xs, x_disc: batch_xs, y: batch_ys, keep_prob: dropout, train: False}
+						)
 						summary_writer.add_summary(summary_disc_out, epoch)
 						summary_writer.add_summary(summary_gen_out, epoch)
 						avgOut_disc += disc_out
@@ -1422,16 +1525,25 @@ if not outputOnly and trainGAN:
 
 					# testing starts here...
 					# get test data
-						batch_xs, batch_ys = getinput(batch_size = numTests,isTraining=False, useVelocities = useVelocities, useVorticities = useVorticities,  useFlags = useFlags, useK_Eps_Turb = useK_Eps_Turb)
+						batch_xs, batch_ys = getinput(
+							batch_size = numTests,isTraining=False, useVelocities = useVelocities,
+							useVorticities = useVorticities,  useFlags = useFlags, useK_Eps_Turb = useK_Eps_Turb
+						)
 						
 						#disc with real imput
-						disc_out_real, summary_test_out, disc_test_cost_real, summary_test = sess.run([disc_sigmoid, outTest_disc_real, disc_loss_disc, lossTest_disc_disc], feed_dict={x: batch_xs, x_disc: batch_xs, y: batch_ys, keep_prob: dropoutOutput, train: False})
+						disc_out_real, summary_test_out, disc_test_cost_real, summary_test = sess.run(
+							[disc_sigmoid, outTest_disc_real, disc_loss_disc, lossTest_disc_disc],
+							feed_dict={x: batch_xs, x_disc: batch_xs, y: batch_ys, keep_prob: dropoutOutput, train: False}
+						)
 						summary_writer.add_summary(summary_test, epoch)
 						summary_writer.add_summary(summary_test_out, epoch)
 						avgTestCost_disc_real += disc_test_cost_real
 						avgTestOut_disc_real += disc_out_real
 						#disc with generated input
-						disc_out_gen, summary_test_out, disc_test_cost_gen, summary_test = sess.run([gen_sigmoid, outTest_disc_gen, disc_loss_gen, lossTest_disc_gen], feed_dict={x: batch_xs, x_disc: batch_xs, keep_prob: dropoutOutput, train: False})
+						disc_out_gen, summary_test_out, disc_test_cost_gen, summary_test = sess.run(
+							[gen_sigmoid, outTest_disc_gen, disc_loss_gen, lossTest_disc_gen],
+							feed_dict={x: batch_xs, x_disc: batch_xs, keep_prob: dropoutOutput, train: False}
+						)
 						summary_writer.add_summary(summary_test, epoch)
 						summary_writer.add_summary(summary_test_out, epoch)
 						avgTestCost_disc_gen += disc_test_cost_gen
@@ -1439,7 +1551,10 @@ if not outputOnly and trainGAN:
 				
 				if(useTempoD): # temporal logs
 					# T disc output with training data
-					batch_xts, batch_yts, batch_y_pos = getTempoinput(numTests, useVelocities = useVelocities, useVorticities = useVorticities, n_t = 3, dt=0.5, useFlags = useFlags, useK_Eps_Turb = useK_Eps_Turb)
+					batch_xts, batch_yts, batch_y_pos = getTempoinput(
+						numTests, useVelocities = useVelocities, useVorticities = useVorticities, n_t = 3, dt=0.5,
+						useFlags = useFlags, useK_Eps_Turb = useK_Eps_Turb
+					)
 					
 					test_dict = {x_t: batch_xts, y_t: batch_yts, keep_prob: dropout, train: False}
 					if(ADV_flag):
@@ -1455,7 +1570,10 @@ if not outputOnly and trainGAN:
 					# test data
 					
 					
-					batch_xts, batch_yts, batch_y_pos = getTempoinput(numTests, useVelocities = useVelocities, useVorticities = useVorticities, n_t = 3, dt=0.5, useFlags = useFlags, useK_Eps_Turb = useK_Eps_Turb)
+					batch_xts, batch_yts, batch_y_pos = getTempoinput(
+						numTests, useVelocities = useVelocities, useVorticities = useVorticities, n_t = 3, dt=0.5,
+						useFlags = useFlags, useK_Eps_Turb = useK_Eps_Turb
+					)
 					# disc with real input
 					test_dict = {x_t: batch_xts, y_t: batch_yts, keep_prob: dropout, train: False}
 					if(ADV_flag):
