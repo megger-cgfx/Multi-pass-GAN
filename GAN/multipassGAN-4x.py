@@ -46,17 +46,17 @@ upRes	  		= int(ph.getParam( "upRes", 		  4 )) 				# scaling factor
 
 #Data and Output
 packedSimPath		 =	 ph.getParam( "packedSimPath",		 '/data/share/GANdata/2ddata_sim/' ) 	# path to training data
-fromSim		 = int(ph.getParam( "fromSim",		 1000 )) 			# range of sim data to use, start index
+fromSim		 = int(ph.getParam( "fromSim",		 0 )) 			# range of sim data to use, start index
 toSim		   = int(ph.getParam( "toSim",		   -1   )) 			# end index
 dataDimension   = int(ph.getParam( "dataDim",		 2 )) 				# dimension of dataset, can be 2 or 3. in case of 3D any scaling will only be applied to H and W (DHW)
-numOut			= int(ph.getParam( "numOut",		  200 )) 			# number ouf images to output (from start of sim)
+numOut			= int(ph.getParam( "numOut",		  190 )) 			# number ouf images to output (from start of sim)
 saveOut	  	= int(ph.getParam( "saveOut",		 False ))>0 		# save output of output mode as .npz in addition to images
 loadOut			= int(ph.getParam( "loadOut",		 -1 )) 			# load output from npz to use in output mode instead of tiles. number or output dir, -1 for not use output data
 outputImages	=int(ph.getParam( "img",  			  True ))>0			# output images
 outputGif		= int(ph.getParam( "gif",  			  False ))>0		# output gif
 outputRef		= int(ph.getParam( "ref",			 False ))>0 		# output "real" data for reference in output mode (may not work with 3D)
 #models
-frame_min		= int(ph.getParam( "frame_min",		   0 ))
+frame_min		= int(ph.getParam( "frame_min",		   1011 ))
 genModel		 =	 ph.getParam( "genModel",		 'gen_test' ) 	# path to training data
 discModel		=	 ph.getParam( "discModel",		 'disc_test' ) 	# path to training data
 #Training
@@ -89,7 +89,7 @@ genRuns  		= int(ph.getParam( "genRuns",  		  1 )) 				# number or generator opt
 batch_norm		= int(ph.getParam( "batchNorm",	   True ))>0			# apply batch normalization to conv and deconv layers
 bn_decay		= float(ph.getParam( "bnDecay",	   0.999 ))			# decay of batch norm EMA
 
-useVelocities   = int(ph.getParam( "useVelocities",   0  )) 			# use velocities or not
+useVelocities   = int(ph.getParam( "useVelocities",   1  )) 			# use velocities or not
 useVorticities  = int(ph.getParam( "useVorticities",   0  )) 			# use vorticities or not
 useFlags   = int(ph.getParam( "useFlags",   0  )) 			# use flags or not
 useK_Eps_Turb = int(ph.getParam( "useK_Eps_Turb",   0  ))
@@ -390,7 +390,7 @@ n_input *= n_inputChannels
 if not load_model_test == -1:
 	if not os.path.exists(basePath + 'test_%04d/' % load_model_test):
 		print('ERROR: Test to load does not exist.')
-	load_path = basePath + 'test_%04d/model_%04d.ckpt' % (load_model_test, load_model_no)
+	load_path = basePath + 'test_%04d/test_%04d.ckpt' % (load_model_test, load_model_no)
 	if outputOnly:
 		out_path_prefix = 'out_%04d-%04d' % (load_model_test,load_model_no)
 		test_path,_ = ph.getNextGenericPath(out_path_prefix, 0, basePath + 'test_%04d/' % load_model_test)
