@@ -178,7 +178,7 @@ class FluidDataLoader(object):
 			fn = os.path.join( file_path, os.path.join( (self.simdirname % (sim_index,frame_index)), (fnbase % (sim_index,frame_index) ) ))
 		return fn
 
-	def collectFilenamesFromDir(self, list_index): 
+	def collectFilenamesFromDir(self, list_index):
 		""" Build filename list from single dir
 			list_index: number in index list (or alternatively label list)
 		"""
@@ -433,7 +433,7 @@ class FluidDataLoader(object):
 			# ... and the same again for y
 			if self.have_y_npz:
 				fofy = 0 if self.multi_file_idxOff_y is None else self.multi_file_idxOff_y[0]
-				fy = self.loadSingleDatum(self.yfn[t], self.np_load_string_y , fofy ) 
+				fy = self.loadSingleDatum(self.yfn[t], self.np_load_string_y , fofy )
 
 				if self.multi_file_list_y is not None:
 					basename = self.yfn[t]
@@ -461,7 +461,9 @@ class FluidDataLoader(object):
 				self.data_shape = fx.shape
 
 				if self.shape is None: # no target shape? use data res
-					self.shape = fx.shape * np.asarray( self.axis_scaling)
+					n_dims = len(fx.shape)
+					axis_scaling_adj = np.asarray(self.axis_scaling)[:n_dims]
+					self.shape = fx.shape * axis_scaling_adj
 					if self.add_adj_idcs:
 						self.shape[3] += 6
 					self.do_zoom = False
@@ -485,7 +487,9 @@ class FluidDataLoader(object):
 				fy = self.removeZComponent(fy)
 
 				if self.y is None:
-					self.data_shape_y = fy.shape * np.asarray(self.axis_scaling_y)
+					n_dims = len(fy.shape)
+					axis_scaling_y_adj = np.asarray(self.axis_scaling)[:n_dims]
+					self.data_shape_y = fy.shape * axis_scaling_y_adj
 					if self.shape_y is None: # no target shape? use data res
 						self.shape_y = fy.shape
 						self.do_zoom = False

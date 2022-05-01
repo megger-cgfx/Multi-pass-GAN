@@ -514,11 +514,11 @@ class GAN(object):
 		'''
 		if len(self.layer.get_shape()) == 4:
 			#self.layer = tf.contrib.keras.backend.resize_images(self.layer, height_factor, width_factor, 'channels_last')
-			self.layer = kb.resize_images(self.layer, height_factor, width_factor, 'channels_last')
+			self.layer = kb.resize_images(self.layer, height_factor, width_factor, 'tf')
 			print("Max Depool : {}".format(self.layer.get_shape()))	
 		if len(self.layer.get_shape()) == 5:
 			#self.layer = tf.contrib.keras.backend.resize_volumes(self.layer, depth_factor, height_factor, width_factor, 'channels_last')
-			self.layer = kb.resize_volumes(self.layer, depth_factor, height_factor, width_factor, 'channels_last')
+			self.layer = kb.resize_volumes(self.layer, depth_factor, height_factor, width_factor, 'tf')
 			print("Max Depool : {}".format(self.layer.get_shape()))
 		return self.layer
 		
