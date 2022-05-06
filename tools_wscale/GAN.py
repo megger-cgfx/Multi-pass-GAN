@@ -18,7 +18,7 @@ class GAN(object):
 	#---------------------------------------------------------------------------------
 	def __init__(self, _image, bn_decay=0.999):
 		self.layer = _image 
-		self.batch_size = tf.shape(_image)[0]
+		self.batch_size = tf.shape(input=_image)[0]
 		self.DOFs = 0
 		# stack 
 		self.preFlatShapes = []
@@ -67,7 +67,7 @@ class GAN(object):
 		image = tf.concat(axis=1, values=rows) # [sidelength * ]
 		s = [int(image.get_shape()[0]), int(image.get_shape()[1])]
 		image = tf.reshape(image, [1, s[0], s[1], out_channels])
-		image = tf.image.resize_images(image, [int(s[1] * 50), int(s[0] * 50)], 1)
+		image = tf.image.resize(image, [int(s[1] * 50), int(s[0] * 50)], 1)
 		image_tag = "l" + str(self.layer_num) + "_weight_image"
 		tf.image_summary(image_tag, image)
 		print("Image Summary: save weights as image")
@@ -80,7 +80,7 @@ class GAN(object):
 	def convolutional_layer(self, outChannels, _patchShape, activation_function=tf.nn.tanh, stride=[1], name="conv",reuse=False, batch_norm=False, train=None, in_layer=None, in_channels = None, gain = np.sqrt(2)):
 		if in_layer==None:
 			in_layer = self.layer
-		with tf.variable_scope(name, reuse = reuse):
+		with tf.compat.v1.variable_scope(name, reuse = reuse):
 			self.layer_num += 1
 			# set the input and output dimension
 			if in_channels is not None :
@@ -107,7 +107,7 @@ class GAN(object):
 			
 			if batch_norm:
 				#self.layer = self.conv_batch_norm(self.layer, train=train)
-				self.layer = tf.contrib.layers.batch_norm(self.layer, decay=self.bn_decay, scale=True, scope=tf.get_variable_scope(), reuse=reuse, fused=False, is_training=train)
+				self.layer = tf.contrib.layers.batch_norm(self.layer, decay=self.bn_decay, scale=True, scope=tf.compat.v1.get_variable_scope(), reuse=reuse, fused=False, is_training=train)
 			layer_lin = self.layer
 			if activation_function:
 				self.layer = activation_function(self.layer)
@@ -151,7 +151,7 @@ class GAN(object):
 	# 2 x 2 max pool operation
 	def max_pool(self, window_size=[2], window_stride=[2]):
 		if len(self.layer.get_shape()) == 4:
-			self.layer = tf.nn.max_pool(self.layer, ksize=[1, window_size[0], window_size[0], 1], strides=[1, window_stride[0], window_stride[0], 1], padding="VALID")
+			self.layer = tf.nn.max_pool2d(input=self.layer, ksize=[1, window_size[0], window_size[0], 1], strides=[1, window_stride[0], window_stride[0], 1], padding="VALID")
 		elif len(self.layer.get_shape()) == 5:
 			self.layer = tf.nn.max_pool3d(self.layer, ksize=[1, window_size[0], window_size[0], window_size[0], 1], strides=[1, window_stride[0], window_stride[0], window_stride[0], 1], padding="VALID")
 		# user output
@@ -161,7 +161,7 @@ class GAN(object):
 	#---------------------------------------------------------------------------------
 	def avg_pool(self, window_size=[2], window_stride=[2]):
 		if len(self.layer.get_shape()) == 4:
-			self.layer = tf.nn.avg_pool(self.layer, ksize=[1, window_size[0], window_size[0], 1], strides=[1, window_stride[0], window_stride[0], 1], padding="VALID")
+			self.layer = tf.nn.avg_pool2d(input=self.layer, ksize=[1, window_size[0], window_size[0], 1], strides=[1, window_stride[0], window_stride[0], 1], padding="VALID")
 		elif len(self.layer.get_shape()) == 5:
 			self.layer = tf.cast(tf.nn.avg_pool3d(tf.cast(self.layer, tf.float32), ksize=[1, window_size[0], window_size[0], window_size[0], 1], strides=[1, window_stride[0], window_stride[0], window_stride[0], 1], padding="VALID"), self.dtypeF)
 		# user output
@@ -171,7 +171,7 @@ class GAN(object):
 	#---------------------------------------------------------------------------------
 	# TODO: center velocities
 	def SemiLagrange (self, source, vel, flags, res, pos):
-		vel_shape = tf.shape(vel)
+		vel_shape = tf.shape(input=vel)
 		dim = 2 #tf.size(vel_shape) - 2 # batch and channels are ignored
 			
 		pos = tf.subtract( tf.add( tf.cast(pos, tf.float32), tf.constant(0.0)), vel)
@@ -184,8 +184,8 @@ class GAN(object):
 		ceils = tf.maximum(ceils, tf.zeros_like(ceils))
 
 		# clamp max
-		floors = tf.minimum(floors, tf.shape(source)[1:dim + 1] - 1)
-		ceils = tf.minimum(ceils, tf.shape(source)[1:dim + 1] - 1)
+		floors = tf.minimum(floors, tf.shape(input=source)[1:dim + 1] - 1)
+		ceils = tf.minimum(ceils, tf.shape(input=source)[1:dim + 1] - 1)
 
 		_broadcaster = tf.ones_like(ceils)
 		cell_value_list = []
@@ -194,12 +194,12 @@ class GAN(object):
 			condition_list = [bool(axis_x & int(pow(2, i))) for i in range(dim)]
 			condition_ = (_broadcaster > 0) & condition_list
 			axis_idx = tf.cast(
-				tf.where(condition_, ceils, floors),
+				tf.compat.v1.where(condition_, ceils, floors),
 				tf.int32)
 
 			# only support linear interpolation...
 			axis_wei = 1.0 - tf.abs((pos - 0.5) - tf.cast(axis_idx, tf.float32))  # shape (..., res_x2, res_x1, dim)
-			axis_wei = tf.reduce_prod(axis_wei, axis=-1, keepdims=True)
+			axis_wei = tf.reduce_prod(input_tensor=axis_wei, axis=-1, keepdims=True)
 			cell_weight_list.append(axis_wei)  # single scalar(..., res_x2, res_x1, 1)
 			first_idx = tf.ones_like(axis_wei, dtype=self.dtypeI)
 			first_idx = tf.cumsum(first_idx, axis=0, exclusive=True)
@@ -213,9 +213,9 @@ class GAN(object):
 		return source_fwd  # shape (..., res_x2, res_x1, channels)
 
 	def MacCormackCorrect(self, flags, source, forward, backward, strength = 1.0, threshold_flags = 0.2):
-		flags = tf.reshape(flags, shape=[-1, tf.shape(source)[1], tf.shape(source)[2], 1])
+		flags = tf.reshape(flags, shape=[-1, tf.shape(input=source)[1], tf.shape(input=source)[2], 1])
 		cond_flags = tf.less(flags, tf.constant(threshold_flags)) # adapt threshold
-		return tf.where(cond_flags, forward + strength * 0.5 * (source - backward), forward)
+		return tf.compat.v1.where(cond_flags, forward + strength * 0.5 * (source - backward), forward)
 				
 	# checkFlag(x,y,z) (flags((x),(y),(z)) & (FlagGrid::TypeFluid|FlagGrid::TypeEmpty))
 	
@@ -303,37 +303,37 @@ class GAN(object):
 		tmp_max = max
 		cond_min = tf.greater( min, source_1)
 		cond_max = tf.less( max, source_1)
-		min = tf.where(cond_min, source_1, min)
-		max = tf.where(cond_max, source_1, max)
-		min = tf.where(cond_flags_1, min, tmp_min)
-		max = tf.where(cond_flags_1, max, tmp_max)
+		min = tf.compat.v1.where(cond_min, source_1, min)
+		max = tf.compat.v1.where(cond_max, source_1, max)
+		min = tf.compat.v1.where(cond_flags_1, min, tmp_min)
+		max = tf.compat.v1.where(cond_flags_1, max, tmp_max)
 		
 		tmp_min = min
 		tmp_max = max
 		cond_min = tf.greater( min, source_2)
 		cond_max = tf.less( max, source_2)
-		min = tf.where(cond_min, source_2, min)
-		max = tf.where(cond_max, source_2, max)
-		min = tf.where(cond_flags_2, min, tmp_min)
-		max = tf.where(cond_flags_2, max, tmp_max)
+		min = tf.compat.v1.where(cond_min, source_2, min)
+		max = tf.compat.v1.where(cond_max, source_2, max)
+		min = tf.compat.v1.where(cond_flags_2, min, tmp_min)
+		max = tf.compat.v1.where(cond_flags_2, max, tmp_max)
 		
 		tmp_min = min
 		tmp_max = max
 		cond_min = tf.greater( min, source_3)
 		cond_max = tf.less( max, source_3)
-		min = tf.where(cond_min, source_3, min)
-		max = tf.where(cond_max, source_3, max)
-		min = tf.where(cond_flags_3, min, tmp_min)
-		max = tf.where(cond_flags_3, max, tmp_max)
+		min = tf.compat.v1.where(cond_min, source_3, min)
+		max = tf.compat.v1.where(cond_max, source_3, max)
+		min = tf.compat.v1.where(cond_flags_3, min, tmp_min)
+		max = tf.compat.v1.where(cond_flags_3, max, tmp_max)
 		
 		tmp_min = min
 		tmp_max = max
 		cond_min = tf.greater( min, source_4)
 		cond_max = tf.less( max, source_4)
-		min = tf.where(cond_min, source_4, min)
-		max = tf.where(cond_max, source_4, max)
-		min = tf.where(cond_flags_4, min, tmp_min)
-		max = tf.where(cond_flags_4, max, tmp_max)
+		min = tf.compat.v1.where(cond_min, source_4, min)
+		max = tf.compat.v1.where(cond_max, source_4, max)
+		min = tf.compat.v1.where(cond_flags_4, min, tmp_min)
+		max = tf.compat.v1.where(cond_flags_4, max, tmp_max)
 		
 		# find min/max around source pos
 		# if(checkFlag(i0,j0,k0)) { min, max = getMinMax(min, max, orig(i0,j0,k0));  haveFl=true; }
@@ -352,11 +352,11 @@ class GAN(object):
 		# if(cmpMinMax(min,max,dst)) dst = fwd;
 		cond_complete = tf.logical_or( tf.logical_or(tf.logical_or(tf.less(intermed_adv, min) , tf.greater(intermed_adv, max)), tf.equal(min, min_i)) , tf.equal(max, max_i))
 
-		return tf.where(cond_complete, forward, intermed_adv)
+		return tf.compat.v1.where(cond_complete, forward, intermed_adv)
 	
 
 	def MacCormackClamp(self, flags, vel, intermed_adv, source, forward, pos, startBz = 15):		
-		grid_res = tf.shape(vel)		
+		grid_res = tf.shape(input=vel)		
 		return self.doClampComponent(grid_res, flags, intermed_adv, source, forward, pos, vel, startBz);
 			
 	# def getMacCormackPosBatch(macgrid_batch, dt, cube_len_output=-1):  
@@ -367,11 +367,11 @@ class GAN(object):
 
 	#	velocity has to be centered, not in MAC-form
 	def advect(self, source, vel, flags, dt, order, strength=0.0, name = "Advection", startBz = 15):
-		res = tf.shape(source)
+		res = tf.shape(input=source)
 		#assert (tf.shape(vel) == res and tf.shape(flags) == res)
-		vel_shape = tf.shape(source)#get_shape().as_list()
+		vel_shape = tf.shape(input=source)#get_shape().as_list()
 		print(vel_shape)
-		dim = tf.size(vel_shape) - 2  # batch and channels are ignored
+		dim = tf.size(input=vel_shape) - 2  # batch and channels are ignored
 		
 		# create index array
 		# TODO precompute array
@@ -380,18 +380,18 @@ class GAN(object):
 		if dim == 3:
 			pos_x = tf.tile(pos_x, [res[3]])
 			pos_x = tf.reshape(pos_x, [1, vel_shape[1], vel_shape[2], vel_shape[3], 1])	
-			pos_y = tf.transpose(pos_x, [0,2,1,3,4])
-			pos_z = tf.transpose(pos_x, [0,3,2,1,4])
+			pos_y = tf.transpose(a=pos_x, perm=[0,2,1,3,4])
+			pos_z = tf.transpose(a=pos_x, perm=[0,3,2,1,4])
 			pos = tf.stack([pos_z, pos_y, pos_x])
 		else:
 			pos_x = tf.reshape(pos_x, [1, vel_shape[1], vel_shape[2], 1])	
-			pos_y = tf.transpose(pos_x, [0,2,1,3])
+			pos_y = tf.transpose(a=pos_x, perm=[0,2,1,3])
 			pos = tf.cast(tf.concat([pos_y, pos_x], axis = 3), dtype = tf.float32)+tf.constant(0.5,dtype = tf.float32)
 
-		upResFactor = tf.maximum(tf.cast((res[1] / tf.shape(vel)[1]),dtype =tf.float32),tf.cast((res[2] / tf.shape(vel)[2]),dtype =tf.float32))
+		upResFactor = tf.maximum(tf.cast((res[1] / tf.shape(input=vel)[1]),dtype =tf.float32),tf.cast((res[2] / tf.shape(input=vel)[2]),dtype =tf.float32))
 		vel = tf.slice(vel, [0,0,0,0], [-1,-1,-1,2])
 		vel = tf.concat((tf.slice(vel,[0,0,0,1], [-1,-1,-1,1]), tf.slice(vel,[0,0,0,0], [-1,-1,-1,1])), axis = 3)
-		vel = tf.image.resize_images(vel,[res[1], res[2]], 0)
+		vel = tf.image.resize(vel,[res[1], res[2]], 0)
 		#vel = tf.contrib.image.transform(vel, [1.0/upResFactor, 0, 0.5/upResFactor, 0, 1.0/upResFactor, 0.5/upResFactor, 0, 0], 'BILINEAR', output_shape=[tf.shape(source)[1], tf.shape(source)[2]])
 		vel *= upResFactor
 		vel_y = tf.contrib.image.transform(tf.slice(vel,[0,0,0,0],[-1,-1,-1,1]), [1, 0, 0, 0, 1, 1, 0, 0], 'NEAREST')
@@ -405,10 +405,10 @@ class GAN(object):
 		dt_arr_1 = tf.cast(tf.ones_like(pos), tf.float32) * dt		
 		dt_arr = tf.concat([dt_arr_1, tf.cast(tf.zeros_like(pos), tf.float32), dt_arr_1 * -1.0], axis = 0)
 		dt_arr = tf.tile(dt_arr, [vel_shape[0]//3,1,1,1])
-		pos = tf.tile(pos, [tf.shape(source)[0],1,1,1])
+		pos = tf.tile(pos, [tf.shape(input=source)[0],1,1,1])
 		vel *= dt_arr
 		# advect quantity: source
-		with tf.variable_scope(name): 
+		with tf.compat.v1.variable_scope(name): 
 			forward_adv = self.SemiLagrange(source, vel, flags, res, pos)
 			if order == 2:
 				backward_adv = self.SemiLagrange(forward_adv, -vel , flags, res, pos)					
@@ -436,7 +436,7 @@ class GAN(object):
 	
 	#---------------------------------------------------------------------------------
 	def fully_connected_layer(self, _numHidden, _act, name="full", gain = np.sqrt(2)):
-		with tf.variable_scope(name):
+		with tf.compat.v1.variable_scope(name):
 			self.layer_num += 1
 			# get previous layer size
 			numInput = int(self.layer.get_shape()[1])
@@ -470,18 +470,18 @@ class GAN(object):
 
 	# pixelnorm, used in progressive growing of gans https://github.com/tkarras/progressive_growing_of_gans/blob/master/networks.py#L120
 	def pixel_norm(self, in_layer, epsilon=1e-8):
-		self.layer = in_layer * tf.rsqrt(tf.reduce_mean(tf.square(in_layer), axis=3, keep_dims=True) + epsilon)
+		self.layer = in_layer * tf.math.rsqrt(tf.reduce_mean(input_tensor=tf.square(in_layer), axis=3, keepdims=True) + epsilon)
 		return self.layer
 		
 	def minibatch_stddev_layer(self, x, group_size=4):
-		group_size = tf.minimum(group_size, tf.shape(x)[0])     # Minibatch must be divisible by (or less than) group_size.
+		group_size = tf.minimum(group_size, tf.shape(input=x)[0])     # Minibatch must be divisible by (or less than) group_size.
 		s = x.shape                                             # [NCHW]  Input shape.
 		y = tf.reshape(x, [group_size, -1, s[1], s[2], s[3]])   # [GMCHW] Split minibatch into M groups of size G.
 		y = tf.cast(y, self.dtypeF)                              # [GMCHW] Cast to FP32.
-		y -= tf.reduce_mean(y, axis=0, keepdims=True)           # [GMCHW] Subtract mean over group.
-		y = tf.reduce_mean(tf.square(y), axis=0)                # [MCHW]  Calc variance over group.
+		y -= tf.reduce_mean(input_tensor=y, axis=0, keepdims=True)           # [GMCHW] Subtract mean over group.
+		y = tf.reduce_mean(input_tensor=tf.square(y), axis=0)                # [MCHW]  Calc variance over group.
 		y = tf.sqrt(y + 1e-8)                                   # [MCHW]  Calc stddev over group.
-		y = tf.reduce_mean(y, axis=[1,2,3], keepdims=True)      # [M111]  Take average over fmaps and pixels.
+		y = tf.reduce_mean(input_tensor=y, axis=[1,2,3], keepdims=True)      # [M111]  Take average over fmaps and pixels.
 		y = tf.cast(y, x.dtype)                                 # [M111]  Cast back to original data type.
 		y = tf.tile(y, [group_size, s[1], s[2], 1])             # [N1HW]  Replicate over group and pixels.
 		self.layer = tf.concat([x, y], axis=3) 
@@ -529,7 +529,7 @@ class GAN(object):
 		is3D = False
 		if len(self.layer.get_shape()) == 5: # 3D data, merge D into C to have a 4D tensor (like 2D data)
 			is3D = True
-			self.layer = tf.transpose(self.layer, [0,2,3,1,4]) # NDHWC -> NHWDC
+			self.layer = tf.transpose(a=self.layer, perm=[0,2,3,1,4]) # NDHWC -> NHWDC
 			s=self.layer.get_shape() # NHWDC
 			self.layer = tf.reshape(self.layer, [-1, int(s[1]), int(s[2]), int(s[3])*int(s[4])]) # NHWDC -> NHW(D*C)
 		if len(scale) == 1:
@@ -538,14 +538,14 @@ class GAN(object):
 		elif len(scale) == 2:
 			outWidth = self.layer.get_shape()[2] * scale[1]#window_stride[0] + window_size[0] - window_stride[0]
 			outHeight = self.layer.get_shape()[1] * scale[0]#window_stride[1] + window_size[1] -  window_stride[1]
-		self.layer = tf.cast(tf.image.resize_images(tf.cast(self.layer, tf.float32), [int(outHeight), int(outWidth)], mode), self.dtypeF) #0 = ResizeMethod.BILINEAR
+		self.layer = tf.cast(tf.image.resize(tf.cast(self.layer, tf.float32), [int(outHeight), int(outWidth)], mode), self.dtypeF) #0 = ResizeMethod.BILINEAR
 		
 		if is3D: # recover D dimension
 			self.layer = tf.reshape(self.layer, [-1, int(outHeight), int(outWidth), int(s[3]), int(s[4])])
-			self.layer = tf.transpose(self.layer, [0,3,1,2,4]) # -> NDHWC
+			self.layer = tf.transpose(a=self.layer, perm=[0,3,1,2,4]) # -> NDHWC
 			s=self.layer.get_shape() # NDHWC
 			self.layer = tf.reshape(self.layer, [-1, int(s[1]), int(s[2]), int(s[3])*int(s[4])])# NDHWC ->	 NDH(W*C)
-			self.layer = tf.cast(tf.image.resize_images(tf.cast(self.layer, tf.float32), [int(s[1]*scale[0]), int(s[2])], mode), self.dtypeF) #0 = ResizeMethod.BILINEAR		
+			self.layer = tf.cast(tf.image.resize(tf.cast(self.layer, tf.float32), [int(s[1]*scale[0]), int(s[2])], mode), self.dtypeF) #0 = ResizeMethod.BILINEAR		
 			self.layer = tf.reshape(self.layer, [-1, int(s[1]*scale[0]), int(s[2]), int(s[3]), int(s[4])])# NDHWC
 
 		print("Avg Depool {}: {}".format(window_size, self.layer.get_shape()))
@@ -555,8 +555,8 @@ class GAN(object):
 		if input_layer == None:
 			input_layer = self.layer	
 			
-		input_layer,_ = self.convolutional_layer(  input_layer.get_shape().as_list()[3] * 4, [1,1], None, stride=[1], name="g_cPS"+stage, in_layer=input_layer, reuse=tf.AUTO_REUSE, batch_norm=False, train=True) #->16,64				
-		self.layer = tf.depth_to_space(input_layer, upres, name = "Pixel_Shuffle")
+		input_layer,_ = self.convolutional_layer(  input_layer.get_shape().as_list()[3] * 4, [1,1], None, stride=[1], name="g_cPS"+stage, in_layer=input_layer, reuse=tf.compat.v1.AUTO_REUSE, batch_norm=False, train=True) #->16,64				
+		self.layer = tf.compat.v1.depth_to_space(input=input_layer, block_size=upres, name = "Pixel_Shuffle")
 		return self.layer
 	
 	#---------------------------------------------------------------------------------
@@ -566,7 +566,7 @@ class GAN(object):
 	def deconvolutional_layer(self, outChannels, _patchShape, activation_function=tf.nn.tanh, stride=[1], name="deconv",reuse=False, batch_norm=False, train=None, init_mean=0., strideOverride=None):
 		if init_mean==1.:
 			name = name+"_EXCLUDE_ME_"
-		with tf.variable_scope(name):
+		with tf.compat.v1.variable_scope(name):
 			self.layer_num += 1
 			shape = self.layer.get_shape()
 			# spread channels
@@ -607,7 +607,7 @@ class GAN(object):
 				
 			if batch_norm:
 				#self.layer = self.conv_batch_norm(self.layer, train=train)
-				self.layer = tf.contrib.layers.batch_norm(self.layer, decay=self.bn_decay, scale=True, scope=tf.get_variable_scope(), reuse=reuse, fused=False, is_training=train)
+				self.layer = tf.contrib.layers.batch_norm(self.layer, decay=self.bn_decay, scale=True, scope=tf.compat.v1.get_variable_scope(), reuse=reuse, fused=False, is_training=train)
 			layer_lin = self.layer
 			if activation_function:
 				self.layer = activation_function(self.layer)
@@ -622,10 +622,10 @@ class GAN(object):
 	#adds noise to the current layer
 	#channels: number of noise channels to add, uses channels of current layer if < 1
 	def noise(self, channels=-1):
-		shape=tf.shape(self.layer)
+		shape=tf.shape(input=self.layer)
 		if channels > 0:
 			shape[-1] = channels
-		noise = tf.random_normal(shape=shape, mean=0.0, stddev=0.04, dtype=self.dtypeF)
+		noise = tf.random.normal(shape=shape, mean=0.0, stddev=0.04, dtype=self.dtypeF)
 		self.layer = tf.concat([self.layer, noise], axis=-1)
 		print("Noise {}: {}".format(noise.get_shape(), self.layer.get_shape()))
 		return self.layer
@@ -644,7 +644,7 @@ class GAN(object):
 		return self.layer
 	#---------------------------------------------------------------------------------
 	def dropout(self, keep_prob):
-		self.layer = tf.nn.dropout(self.layer, keep_prob)
+		self.layer = tf.nn.dropout(self.layer, rate=1 - (keep_prob))
 		print("Dropout: {}".format(self.layer.get_shape()))
 		return self.layer
 	
@@ -665,9 +665,9 @@ class GAN(object):
 		std = gain / np.sqrt(in_lay) # He init
 		if use_wscale:
 			wscale = tf.constant(np.float32(std), name='wscale', dtype = self.dtypeF)
-			v = tf.get_variable("weight", shape, initializer=tf.initializers.random_normal(dtype = self.dtypeF), dtype = self.dtypeF) * wscale
+			v = tf.compat.v1.get_variable("weight", shape, initializer=tf.compat.v1.initializers.random_normal(dtype = self.dtypeF), dtype = self.dtypeF) * wscale
 		else:
-			v = tf.get_variable("weight", shape, initializer=tf.keras.initializers.he_normal(dtype = self.dtypeF), dtype = self.dtypeF)
+			v = tf.compat.v1.get_variable("weight", shape, initializer=tf.compat.v1.keras.initializers.he_normal(dtype = self.dtypeF), dtype = self.dtypeF)
 		#else:
 		#	v = tf.get_variable("weight", shape, initializer=tf.random_normal_initializer(stddev=s, mean=init_mean))
 
@@ -680,7 +680,7 @@ class GAN(object):
 	#---------------------------------------------------------------------------------
 	# gemerate biases for the nodes
 	def bias_variable(self, shape, name="b"):
-		return tf.get_variable("bias", shape, initializer=tf.constant_initializer(0.1, dtype = self.dtypeF), dtype = self.dtypeF)
+		return tf.compat.v1.get_variable("bias", shape, initializer=tf.compat.v1.constant_initializer(0.1, dtype = self.dtypeF), dtype = self.dtypeF)
 
 	#---------------------------------------------------------------------------------
 	def conv2d(self, x, W, stride=[1]):
@@ -688,7 +688,7 @@ class GAN(object):
 			strides = [1, stride[0], stride[0], 1]
 		elif len(stride) == 2: #[H,W]
 			strides = [1, stride[0], stride[1], 1]
-		return tf.nn.conv2d(x, W, strides=strides, padding="SAME")
+		return tf.nn.conv2d(input=x, filters=W, strides=strides, padding="SAME")
 		
 	def conv3d(self, x, W, stride=[1]):
 		if len(stride) == 1: #[DHW]
@@ -718,20 +718,20 @@ class GAN(object):
 
 	def variable_summaries(self, var, name):
 		"""Attach a lot of summaries to a Tensor."""
-		with tf.name_scope('summaries'):
-			mean = tf.reduce_mean(var)
-			tf.summary.scalar('mean/' + name, mean)
-			with tf.name_scope('stddev'):
-				stddev = tf.sqrt(tf.reduce_sum(tf.square(var - mean)))
-			tf.summary.scalar('sttdev/' + name, stddev)
-			tf.summary.scalar('max/' + name, tf.reduce_max(var))
-			tf.summary.scalar('min/' + name, tf.reduce_min(var))
-			tf.summary.histogram(name, var)
+		with tf.compat.v1.name_scope('summaries'):
+			mean = tf.reduce_mean(input_tensor=var)
+			tf.compat.v1.summary.scalar('mean/' + name, mean)
+			with tf.compat.v1.name_scope('stddev'):
+				stddev = tf.sqrt(tf.reduce_sum(input_tensor=tf.square(var - mean)))
+			tf.compat.v1.summary.scalar('sttdev/' + name, stddev)
+			tf.compat.v1.summary.scalar('max/' + name, tf.reduce_max(input_tensor=var))
+			tf.compat.v1.summary.scalar('min/' + name, tf.reduce_min(input_tensor=var))
+			tf.compat.v1.summary.histogram(name, var)
 			
 	
 #from https://github.com/bamos/dcgan-completion.tensorflow
 def lrelu(x, leak=0.2, name="lrelu"):
-    with tf.variable_scope(name):
+    with tf.compat.v1.variable_scope(name):
         f1 = 0.5 * (1 + leak)
         f2 = 0.5 * (1 - leak)
         return f1 * x + f2 * abs(x)	

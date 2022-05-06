@@ -394,7 +394,7 @@ if not outputOnly:
 	
 print("Random seed: {}".format(randSeed))
 np.random.seed(randSeed)
-tf.compat.v1.set_random_seed(randSeed)
+tf.set_random_seed(randSeed)
 
 # ---------------------------------------------
 
@@ -467,22 +467,22 @@ def save_img_3d(out_path, img): # y ↓ x →， z ↓ x →, z ↓ y →，3 in
 #input for gen
 bn=batch_norm
 #training or testing for batch norm
-train = tf.compat.v1.placeholder(tf.bool)
-percentage = tf.compat.v1.placeholder(tf.float32)
-gdrop_str_d = tf.compat.v1.placeholder(tf.float32)
+train = tf.placeholder(tf.bool)
+percentage = tf.placeholder(tf.float32)
+gdrop_str_d = tf.placeholder(tf.float32)
 if useTempoD:
-	gdrop_str_t = tf.compat.v1.placeholder(tf.float32)
+	gdrop_str_t = tf.placeholder(tf.float32)
 
-x = tf.compat.v1.placeholder(tf.float32,[None,n_input], name = "x")
-x_disc =tf.compat.v1.placeholder(tf.float32,[None,n_input], name = "x_disc")
+x = tf.placeholder(tf.float32,[None,n_input], name = "x")
+x_disc =tf.placeholder(tf.float32,[None,n_input], name = "x_disc")
 
 #real input for disc
-kk = tf.compat.v1.placeholder(tf.float32)
-kk2 = tf.compat.v1.placeholder(tf.float32)
-kkt = tf.compat.v1.placeholder(tf.float32)
-kktl = tf.compat.v1.placeholder(tf.float32)
+kk = tf.placeholder(tf.float32)
+kk2 = tf.placeholder(tf.float32)
+kkt = tf.placeholder(tf.float32)
+kktl = tf.placeholder(tf.float32)
 #keep probablity for dropout
-keep_prob = tf.compat.v1.placeholder(tf.float32)
+keep_prob = tf.placeholder(tf.float32)
 
 print("x: {}".format(x.get_shape()))
 
@@ -512,31 +512,31 @@ if use_loss_scaling:
 		
 	def calc_gradients(loss, vars, optimizer, ls_var):
 		# Register device and compute gradients.
-		with tf.compat.v1.name_scope('grads'):
+		with tf.name_scope('grads'):
 			loss = apply_loss_scaling(tf.cast(loss, tf.float32), ls_var)
-			grads = optimizer.compute_gradients(loss, vars, gate_gradients=tf.compat.v1.train.Optimizer.GATE_NONE) # disable gating to reduce memory usage
+			grads = optimizer.compute_gradients(loss, vars, gate_gradients=tf.train.Optimizer.GATE_NONE) # disable gating to reduce memory usage
 			grads = [(g, v) if g is not None else (tf.zeros_like(v), v) for g, v in grads] # replace disconnected gradients with zeros
 		return grads
 		
 	# Construct training op to update the registered variables based on their gradients.
 	def apply_updates(grads, optimizer, ls_var, ind, sess = None):
-		with tf.compat.v1.name_scope('apply_grads%d'% ind):
+		with tf.name_scope('apply_grads%d'% ind):
 			total_grads = len(grads)
 			
-			with tf.compat.v1.name_scope('Scale'):
+			with tf.name_scope('Scale'):
 				coef = tf.constant(np.float32(1.0/total_grads), name='coef')
 				coef = undo_loss_scaling(coef, ls_var)
 				grads = [(g * coef, v) for g, v in grads]
 
 			# Check for overflows.
-			with tf.compat.v1.name_scope('CheckOverflow'):
-				grad_ok = tf.reduce_all(input_tensor=tf.stack([tf.reduce_all(input_tensor=tf.math.is_finite(g)) for g, v in grads]))
+			with tf.name_scope('CheckOverflow'):
+				grad_ok = tf.reduce_all(tf.stack([tf.reduce_all(tf.is_finite(g)) for g, v in grads]))
 
 			# Update weights and adjust loss scaling.
-			with tf.compat.v1.name_scope('UpdateWeights'):
-				ops = tf.cond(pred=grad_ok,
-					true_fn=lambda: tf.group(tf.compat.v1.assign_add(ls_var, loss_scaling_inc), optimizer.apply_gradients(grads)),
-					false_fn=lambda: tf.group(tf.compat.v1.assign_sub(ls_var, loss_scaling_dec)))
+			with tf.name_scope('UpdateWeights'):
+				ops = tf.cond(grad_ok,
+					lambda: tf.group(tf.assign_add(ls_var, loss_scaling_inc), optimizer.apply_gradients(grads)),
+					lambda: tf.group(tf.assign_sub(ls_var, loss_scaling_dec)))
 							
 			return ops
 
@@ -551,7 +551,7 @@ def tensorResample(value, pos, flags = None, name='Resample'):
 	# else:
 	#	value = tf.reshape(value, shape = (-1, tilesz, tilesz, tilesz, int( n_input / (tilesz * tilesz * tilesz)) ))
 	#	pos = tf.reshape( pos, shape = (-1, tilesz, tilesz, tilesz, 3 ))
-	with tf.compat.v1.name_scope(name) as scope:
+	with tf.name_scope(name) as scope:
 		pos_shape = pos.get_shape().as_list()
 		dim = len(pos_shape) - 2  # batch and channels are ignored
 		assert (dim == pos_shape[-1])
@@ -576,12 +576,12 @@ def tensorResample(value, pos, flags = None, name='Resample'):
 				condition_list = [bool(axis_x & int(pow(2, i))) for i in range(dim)]
 				condition_ = (_broadcaster > 0) & condition_list
 				axis_idx = tf.cast(
-					tf.compat.v1.where(condition_, ceils, floors),
+					tf.where(condition_, ceils, floors),
 					tf.int32)
 
 				# only support linear interpolation...
 				axis_wei = 1.0 - tf.abs((pos-0.5) - tf.cast(axis_idx, tf.float32))  # shape (..., res_x2, res_x1, dim)			
-				axis_wei = tf.reduce_prod(input_tensor=axis_wei, axis=-1, keepdims=True)
+				axis_wei = tf.reduce_prod(axis_wei, axis=-1, keep_dims=True)
 				
 				cell_weight_list.append(axis_wei)  # single scalar(..., res_x2, res_x1, 1)
 				first_idx = tf.ones_like(axis_wei, dtype=tf.int32)
@@ -599,7 +599,7 @@ def lerp(x, y, t):
 	return tf.add(x, (y - x) * tf.clip_by_value(t,0.0,1.0))
 
 def gaussian_noise_layer(input_layer, strength):  
-    noise = tf.random.normal(shape=tf.shape(input=input_layer), mean=0.0, stddev=1.0, dtype=tf.float32) 
+    noise = tf.random_normal(shape=tf.shape(input_layer), mean=0.0, stddev=1.0, dtype=tf.float32) 
     return input_layer + noise * (strength * tf.sqrt(tf.cast(input_layer.get_shape().as_list()[3], tf.float32)))
 	
 # set up GAN structure
@@ -623,7 +623,7 @@ def resBlock(gan, inp, s1, s2, reuse, use_batch_norm, name, filter_size=3):
 	return resUnit1
 	
 def growBlockGen(gan, inp, upres, fms, use_batch_norm, train, reuse, output = False):
-	with tf.compat.v1.variable_scope("genBlock%d"%(upres), reuse=reuse) as scope:
+	with tf.variable_scope("genBlock%d"%(upres), reuse=reuse) as scope:
 		if upsampling_mode == 2:
 			if not usePixelShuffle:
 				inDepool = gan.avg_depool(mode = upsampleMode)
@@ -672,7 +672,7 @@ def growing_gen(_in, percentage, reuse=False, use_batch_norm=False, train=None, 
 	global rbId
 	print("\n\tGenerator (growing-sliced-resnett3-deep)")
 	
-	with tf.compat.v1.variable_scope("generator", reuse=reuse) as scope:
+	with tf.variable_scope("generator", reuse=reuse) as scope:
 		if dataDimension == 2:
 			if upsampling_mode == 2:
 				_in = tf.reshape(_in, shape=[-1, tileSizeLow, tileSizeLow, n_inputChannels]) #NHWC
@@ -718,11 +718,11 @@ def growing_gen(_in, percentage, reuse=False, use_batch_norm=False, train=None, 
 					elif upsampling_mode == 1 or upsampling_mode == 3:
 						_dens = _dens + tf.slice(_in, [0,0,0,0], [-1,tileSizeHigh, tileSizeHigh, 1])						
 					elif upsampling_mode == 0:
-						_dens = _dens + tf.image.resize(tf.slice(_in, [0,0,0,4], [-1, tileSizeHigh, tileSizeLow, 1]), [tileSizeHigh, tileSizeLow * int(2**(j))], 2)
+						_dens = _dens + tf.image.resize_images(tf.slice(_in, [0,0,0,4], [-1, tileSizeHigh, tileSizeLow, 1]), [tileSizeHigh, tileSizeLow * int(2**(j))], 2)
 
 			print("\tDOFs: %d , %f m " % ( gan.getDOFs() , gan.getDOFs()/1000000.) )
 				
-			with tf.compat.v1.variable_scope("growingPart%i"%j, reuse=reuse) as scope:
+			with tf.variable_scope("growingPart%i"%j, reuse=reuse) as scope:
 				if not output:
 					if upsampling_mode == 2:
 						_oldDens = GAN(_oldDens).avg_depool(mode = 1)	
@@ -750,7 +750,7 @@ def gn(x, gstr):
 		return x
 		
 def growBlockDisc(gan, inp,  upres, fms, use_batch_norm, train, reuse, name, gstr = 0.0):
-	with tf.compat.v1.variable_scope(name+("Block%d"%(upres)), reuse=reuse) as scope:		
+	with tf.variable_scope(name+("Block%d"%(upres)), reuse=reuse) as scope:		
 		if name == "t" and useVelInTDisc:
 			filter = [filterSize+2,filterSize]
 		else:			
@@ -774,7 +774,7 @@ def growBlockDisc(gan, inp,  upres, fms, use_batch_norm, train, reuse, name, gst
 		elif upsampling_mode == 1 or upsampling_mode == 3:
 			outp = x2
 		elif upsampling_mode == 0:
-			outp = tf.nn.avg_pool2d(input=x2, ksize=[1, 1, 2, 1], strides=[1, 1, 2, 1], padding="VALID") 
+			outp = tf.nn.avg_pool(x2, ksize=[1, 1, 2, 1], strides=[1, 1, 2, 1], padding="VALID") 
 	
 		return outp, x1, x2
 		
@@ -787,8 +787,8 @@ def growing_disc(in_high_, in_low_, percentage,reuse=False, use_batch_norm=False
 	#train: if use_batch_norm, tf bool placeholder
 	#use_batch_norm = False
 	print("\n\tDiscriminator (conditional binary classifier)")
-	with tf.compat.v1.variable_scope("spatial-disc", reuse=reuse) as scope:	
-		shape = tf.shape(input=in_low_)
+	with tf.variable_scope("spatial-disc", reuse=reuse) as scope:	
+		shape = tf.shape(in_low_)
 		in_high_ = tf.reshape(in_high_, shape=[-1,tileSizeHigh,tileSizeHigh, 1])
 		if upsampling_mode == 2:
 			#if add_adj_idcs:
@@ -828,13 +828,13 @@ def growing_disc(in_high_, in_low_, percentage,reuse=False, use_batch_norm=False
 			if upsampling_mode == 2:
 				inHigh = GAN(inHigh).avg_pool()#
 			elif upsampling_mode == 0:
-				inHigh = tf.nn.avg_pool2d(input=inHigh, ksize=[1, 1, 2, 1], strides=[1, 1, 2, 1], padding="VALID") #inHigh = GAN(inHigh).avg_pool()#
+				inHigh = tf.nn.avg_pool(inHigh, ksize=[1, 1, 2, 1], strides=[1, 1, 2, 1], padding="VALID") #inHigh = GAN(inHigh).avg_pool()#
 				
 			x_, x1, x2 = growBlockDisc(gan, x_, int(2**(j)), int(num_fms), False, train, reuse,"d", gstr = gstr)	
 			
 			fromDensFms =min(min( num_fms*2, max_fms),start_fms//2)
 			_oldDens,_ = gan2.convolutional_layer( fromDensFms, [1,1], None, stride=[1], name="d_cfromDensity%d"%(2**(j-1)), in_layer=inHigh, reuse=reuse, batch_norm=False, train=train)			
-			with tf.compat.v1.variable_scope(("blend%i"%j), reuse=reuse) as scope:	
+			with tf.variable_scope(("blend%i"%j), reuse=reuse) as scope:	
 				if upsampling_mode == 2:		
 					x_ = tf.reshape(lerp( _oldDens, x_, percentage - (j - 1)), shape = [-1,tileSizeLow * (2**(j-1)),tileSizeLow * (2**(j-1)), fromDensFms])
 				elif upsampling_mode == 1 or upsampling_mode == 3:
@@ -850,8 +850,8 @@ def growing_disc(in_high_, in_low_, percentage,reuse=False, use_batch_norm=False
 		filter = [filterSize,filterSize]
 				
 		if not first_nn_arch:			
-			x1,_ = gan.convolutional_layer(  32, filter, lrelu, stride=[1], name=str('d')+"_cA%d"%(1), in_layer=tf.reshape(gn(x_,gstr), shape=tf.shape(input=x_)), reuse=reuse, batch_norm=use_batch_norm, train=train)
-			x2,_ = gan.convolutional_layer(  4, filter, None, stride=[1], name=str('d')+"_cB%d"%(1), in_layer=tf.reshape(gn(x1,gstr), shape=tf.shape(input=x1)), reuse=reuse, batch_norm=use_batch_norm, train=train)
+			x1,_ = gan.convolutional_layer(  32, filter, lrelu, stride=[1], name=str('d')+"_cA%d"%(1), in_layer=tf.reshape(gn(x_,gstr), shape=tf.shape(x_)), reuse=reuse, batch_norm=use_batch_norm, train=train)
+			x2,_ = gan.convolutional_layer(  4, filter, None, stride=[1], name=str('d')+"_cB%d"%(1), in_layer=tf.reshape(gn(x1,gstr), shape=tf.shape(x1)), reuse=reuse, batch_norm=use_batch_norm, train=train)
 		else:
 			x1 = x_
 			
@@ -873,7 +873,7 @@ def growing_disc_tempo(in_high_,percentage, n_t_channels=3, reuse=True, use_batc
 	# train: if use_batch_norm, tf bool placeholder
 	#use_batch_norm = False
 	print("\n\tDiscriminator for Tempo (unconditional binary classifier)")
-	with tf.compat.v1.variable_scope("tempo-disc", reuse=reuse) as scope:
+	with tf.variable_scope("tempo-disc", reuse=reuse) as scope:
 		if useVelInTDisc:
 			in_high_ = tf.reshape(in_high_, shape=[-1,tileSizeHigh,tileSizeHigh, 12])
 		else:
@@ -890,13 +890,13 @@ def growing_disc_tempo(in_high_,percentage, n_t_channels=3, reuse=True, use_batc
 			if upsampling_mode == 2:
 				inHigh = GAN(inHigh).avg_pool()
 			elif upsampling_mode == 0:
-				inHigh = tf.nn.avg_pool2d(input=inHigh, ksize=[1, 1, 2, 1], strides=[1, 1, 2, 1], padding="VALID") #inHigh = GAN(inHigh).avg_pool()#
+				inHigh = tf.nn.avg_pool(inHigh, ksize=[1, 1, 2, 1], strides=[1, 1, 2, 1], padding="VALID") #inHigh = GAN(inHigh).avg_pool()#
 
 			x, x1, x2 = growBlockDisc(gan, x, int(2**(j)), int(num_fms), False, train, reuse,"t", gstr = gstr)	
 				
 			_oldDens, _ = gan2.convolutional_layer( min(min( num_fms*2, max_fms),start_fms//2), [1,1], None, stride=[1], name="t_cfromDensity%d"%(2**(j-1)), in_layer=inHigh, reuse=reuse, batch_norm=False, train=train)			
 			
-			with tf.compat.v1.variable_scope(("blend%i"%j), reuse=reuse) as scope:
+			with tf.variable_scope(("blend%i"%j), reuse=reuse) as scope:
 				if upsampling_mode == 2:				
 					x = tf.reshape(lerp(_oldDens, x, percentage - (j - 1)), shape = [-1,tileSizeLow * (2**(j-1)),tileSizeLow * (2**(j-1)), min(min( num_fms*2, max_fms),start_fms//2)])
 				elif upsampling_mode == 1 or upsampling_mode == 3:
@@ -909,8 +909,8 @@ def growing_disc_tempo(in_high_,percentage, n_t_channels=3, reuse=True, use_batc
 		filter = [filterSize,filterSize]
 		
 		if not first_nn_arch:	
-			x1,_ = gan.convolutional_layer(  32, filter, lrelu, stride=[1], name=str('t')+"_cA%d"%(1), in_layer=tf.reshape(gn(x,gstr), shape=tf.shape(input=x)), reuse=reuse, batch_norm=use_batch_norm, train=train) 
-			x2,_ = gan.convolutional_layer(  4, filter, None, stride=[1], name=str('t')+"_cB%d"%(1), in_layer=tf.reshape(gn(x1,gstr), shape=tf.shape(input=x1)), reuse=reuse, batch_norm=use_batch_norm, train=train) 
+			x1,_ = gan.convolutional_layer(  32, filter, lrelu, stride=[1], name=str('t')+"_cA%d"%(1), in_layer=tf.reshape(gn(x,gstr), shape=tf.shape(x)), reuse=reuse, batch_norm=use_batch_norm, train=train) 
+			x2,_ = gan.convolutional_layer(  4, filter, None, stride=[1], name=str('t')+"_cB%d"%(1), in_layer=tf.reshape(gn(x1,gstr), shape=tf.shape(x1)), reuse=reuse, batch_norm=use_batch_norm, train=train) 
 		else:
 			x2 = x
 			
@@ -926,7 +926,7 @@ def growing_disc_tempo(in_high_,percentage, n_t_channels=3, reuse=True, use_batc
 def gen_test(_in, reuse=False, use_batch_norm=False, train=None):
 	global rbId
 	print("\n\tGenerator-test")
-	with tf.compat.v1.variable_scope("generator-test", reuse=reuse) as scope:
+	with tf.variable_scope("generator-test", reuse=reuse) as scope:
 		if dataDimension == 2:
 			_in = tf.reshape(_in, shape=[-1, tileSizeLow, tileSizeLow, n_inputChannels]) #NHWC
 			patchShape = [2,2]
@@ -945,17 +945,17 @@ def gen_test(_in, reuse=False, use_batch_norm=False, train=None):
 ############################################disc_test###############################################################
 def disc_test(in_low, in_high, reuse=False, use_batch_norm=False, train=None):
 	print("\n\tDiscriminator-test")
-	with tf.compat.v1.variable_scope("discriminator_test", reuse=reuse):
+	with tf.variable_scope("discriminator_test", reuse=reuse):
 		if dataDimension == 2:
 			#in_low,_,_ = tf.split(in_low,n_inputChannels,1)
-			shape = tf.shape(input=in_low)
+			shape = tf.shape(in_low)
 			in_low = tf.slice(in_low,[0,0],[shape[0],int(n_input/n_inputChannels)])
 			in_low = GAN(tf.reshape(in_low, shape=[-1, tileSizeLow, tileSizeLow, 1])).max_depool(height_factor = upRes,width_factor = upRes) #NHWC
 			in_high = tf.reshape(in_high, shape=[-1, tileSizeHigh, tileSizeHigh, 1])
 			filter=[4,4]
 			stride2 = [2]
 		elif dataDimension == 3:
-			shape = tf.shape(input=in_low)
+			shape = tf.shape(in_low)
 			in_low = tf.slice(in_low,[0,0],[shape[0],int(n_input/n_inputChannels)])
 			in_low = GAN(tf.reshape(in_low, shape=[-1, tileSizeLow, tileSizeLow, tileSizeLow, 1])).max_depool(depth_factor = upRes,height_factor = upRes,width_factor = upRes) #NDHWC
 			in_high = tf.reshape(in_high, shape=[-1, tileSizeHigh, tileSizeHigh, tileSizeHigh, 1]) # dim D is not upscaled
@@ -990,7 +990,7 @@ disc_time_model = growing_disc_tempo
 #set up GAN structure
 bn=batch_norm
 #training or testing for batch norm
-train = tf.compat.v1.placeholder(tf.bool)
+train = tf.placeholder(tf.bool)
 
 lr_global_step = tf.Variable(0, trainable=False)
 learning_rate_scalar = learning_rate
@@ -1003,10 +1003,10 @@ for i in range(3):
 	curr_lr = learning_rate
 	if decayLR:
 		if useTempoD:
-			learning_rates_t.append(tf.compat.v1.train.polynomial_decay(curr_lr, lr_global_step, decayIter, learning_rate_scalar*0.05, power=1.1))
+			learning_rates_t.append(tf.train.polynomial_decay(curr_lr, lr_global_step, decayIter, learning_rate_scalar*0.05, power=1.1))
 		if use_spatialdisc:
-			learning_rates_d.append(tf.compat.v1.train.polynomial_decay(curr_lr, lr_global_step,  decayIter, learning_rate_scalar*0.05, power=1.1))
-		learning_rates_g.append(tf.compat.v1.train.polynomial_decay(curr_lr, lr_global_step,  decayIter, learning_rate_scalar*0.05, power=1.1))
+			learning_rates_d.append(tf.train.polynomial_decay(curr_lr, lr_global_step,  decayIter, learning_rate_scalar*0.05, power=1.1))
+		learning_rates_g.append(tf.train.polynomial_decay(curr_lr, lr_global_step,  decayIter, learning_rate_scalar*0.05, power=1.1))
 	else:
 		learning_rates_g.append(curr_lr)
 		curr_lr /= 2
@@ -1020,9 +1020,9 @@ k2_ls = []
 for i in range( int(round(math.log(upRes,2)))*2+2):	
 	k2_ls.append(1.0)
 	
-x = tf.compat.v1.placeholder(tf.float32,[None,n_input], name = "x")
-x_disc =tf.compat.v1.placeholder(tf.float32,[None,n_input], name = "x_disc")
-y = tf.compat.v1.placeholder(tf.float32,[None,None], name = "y")
+x = tf.placeholder(tf.float32,[None,n_input], name = "x")
+x_disc =tf.placeholder(tf.float32,[None,n_input], name = "x_disc")
+y = tf.placeholder(tf.float32,[None,None], name = "y")
 
 #randSize = tf.constant(0.85, dtype =tf.float32) + tf.random_uniform([]) * tf.constant(0.3, dtype =tf.float32)
 #x = tf.reshape(tf.image.crop_and_resize(tf.reshape(x, shape=[-1,tileSizeLow,tileSizeLow,n_inputChannels]),[[0,0,1,1]],tf.zeros(tf.shape(x)[0],dtype = tf.int32),crop_size = [tileSizeLow, tileSizeLow]), shape=[-1,n_input])
@@ -1031,33 +1031,33 @@ print("x: {}".format(x.get_shape()))
 #useTempoD = False
 
 if useTempoD:
-	y_t = tf.compat.v1.placeholder(tf.float32,[None,None], name = "yt")
-	x_t = tf.compat.v1.placeholder(tf.float32,[None,n_input], name = "xt")	
+	y_t = tf.placeholder(tf.float32,[None,None], name = "yt")
+	x_t = tf.placeholder(tf.float32,[None,n_input], name = "xt")	
 	if ADV_flag:
-		y_pos = tf.compat.v1.placeholder(tf.float32,[None, None], name = "yp")
+		y_pos = tf.placeholder(tf.float32,[None, None], name = "yp")
 		
 if not outputOnly: #setup for training	
 	if upsampling_mode == 2 or upsampling_mode == 0:
 		x_in = x
 	elif upsampling_mode == 1 or upsampling_mode == 3:
 		x_in_2 = tf.slice(tf.reshape(y, shape = [-1, tileSizeHigh, tileSizeHigh, 2]), [0,0,0,1], [-1,tileSizeHigh, tileSizeHigh, 1])		
-		x_in = tf.concat((x_in_2, tf.image.resize(tf.slice(tf.reshape(x, shape = [-1, tileSizeLow, tileSizeLow, n_inputChannels]),[0,0,0,0], [-1, tileSizeLow, tileSizeLow, n_inputChannels]), tf.constant([tileSizeHigh, tileSizeHigh], dtype= tf.int32), method=1)), axis = 3)
+		x_in = tf.concat((x_in_2, tf.image.resize_images(tf.slice(tf.reshape(x, shape = [-1, tileSizeLow, tileSizeLow, n_inputChannels]),[0,0,0,0], [-1, tileSizeLow, tileSizeLow, n_inputChannels]), tf.constant([tileSizeHigh, tileSizeHigh], dtype= tf.int32), method=1)), axis = 3)
 	
 	gen_y = gen_model(x_in, use_batch_norm=bn, reuse = False, train=train, currentUpres = int(round(math.log(upRes, 2))), percentage = percentage)
 	
 	if upsampling_mode == 1 or upsampling_mode == 3:
 		gen_y = tf.reshape(gen_y, shape=[-1, tileSizeHigh, tileSizeHigh, 1])
 	
-	upresFac = tf.pow(tf.constant(2,dtype=tf.int32), tf.cast( tf.math.ceil(percentage),dtype=tf.int32))
+	upresFac = tf.pow(tf.constant(2,dtype=tf.int32), tf.cast( tf.ceil(percentage),dtype=tf.int32))
 	if upsampling_mode == 2:
 		currentTileSizeX = upresFac * tf.constant(tileSizeLow, dtype = tf.int32)
 	elif upsampling_mode == 1 or upsampling_mode == 3:
 		currentTileSizeX = tf.constant(tileSizeHigh, dtype = tf.int32)
 		
 	if upsampling_mode == 2:
-		y_in = tf.reshape(tf.image.resize(tf.reshape(y, shape= [-1, currentTileSizeX, currentTileSizeX,1]), tf.constant([tileSizeHigh, tileSizeHigh], dtype= tf.int32), method=1), shape = [tf.shape(input=gen_y)[0], n_output])
+		y_in = tf.reshape(tf.image.resize_images(tf.reshape(y, shape= [-1, currentTileSizeX, currentTileSizeX,1]), tf.constant([tileSizeHigh, tileSizeHigh], dtype= tf.int32), method=1), shape = [tf.shape(gen_y)[0], n_output])
 	elif upsampling_mode == 0:
-		y_in = tf.reshape(y, shape = [tf.shape(input=gen_y)[0], n_output])
+		y_in = tf.reshape(y, shape = [tf.shape(gen_y)[0], n_output])
 	elif upsampling_mode == 1 or upsampling_mode == 3:
 		y_in = tf.reshape(tf.slice(tf.reshape(y, shape = [-1, tileSizeHigh, tileSizeHigh, 2]), [0,0,0,0], [-1,tileSizeHigh, tileSizeHigh, 1]), shape= [-1, tileSizeHigh, tileSizeHigh, 1])
 	
@@ -1072,10 +1072,10 @@ else: #setup for generating output with trained model
 	elif upsampling_mode == 0:
 		x_in = x
 	elif upsampling_mode == 1 or upsampling_mode == 3:
-		x_in = tf.concat((tf.reshape(y, shape = [-1, tileSizeHigh, tileSizeHigh, 1]), tf.image.resize(tf.slice(tf.reshape(x, shape = [-1, tileSizeLow, tileSizeLow, n_inputChannels]),[0,0,0,0],[-1,tileSizeLow,tileSizeLow, n_inputChannels]), tf.constant([tileSizeHigh, tileSizeHigh], dtype= tf.int32), method=1)), axis = 3)
+		x_in = tf.concat((tf.reshape(y, shape = [-1, tileSizeHigh, tileSizeHigh, 1]), tf.image.resize_images(tf.slice(tf.reshape(x, shape = [-1, tileSizeLow, tileSizeLow, n_inputChannels]),[0,0,0,0],[-1,tileSizeLow,tileSizeLow, n_inputChannels]), tf.constant([tileSizeHigh, tileSizeHigh], dtype= tf.int32), method=1)), axis = 3)
 	
 	# TODO: full pipeline (using two generators, e.g.)
-	sampler = gen_model(x_in, use_batch_norm=bn, reuse = tf.compat.v1.AUTO_REUSE, currentUpres = int(round(math.log(upRes, 2))), train=False, percentage = percentage, output = True)
+	sampler = gen_model(x_in, use_batch_norm=bn, reuse = tf.AUTO_REUSE, currentUpres = int(round(math.log(upRes, 2))), train=False, percentage = percentage, output = True)
 
 sys.stdout.flush()
 
@@ -1083,71 +1083,71 @@ if not outputOnly:
 	#for discriminator [0,1] output
 	if use_spatialdisc:
 		if use_LSGAN or use_wgan_gp:
-			d_sig_y= tf.reduce_mean(input_tensor=-disc)
-			d_sig_g= tf.reduce_mean(input_tensor=gen)
+			d_sig_y= tf.reduce_mean(-disc)
+			d_sig_g= tf.reduce_mean(gen)
 		else:
-			d_sig_y= tf.reduce_mean(input_tensor=tf.nn.sigmoid(disc))
-			d_sig_g= tf.reduce_mean(input_tensor=tf.nn.sigmoid(gen))
+			d_sig_y= tf.reduce_mean(tf.nn.sigmoid(disc))
+			d_sig_g= tf.reduce_mean(tf.nn.sigmoid(gen))
 						 
-		disc_loss_layer = tf.reduce_mean(input_tensor=tf.nn.l2_loss(f_y[0] - f_g[0])) * k2_ls[0]
+		disc_loss_layer = tf.reduce_mean(tf.nn.l2_loss(f_y[0] - f_g[0])) * k2_ls[0]
 		for i in range(1,len(f_g)):
-			disc_loss_layer += tf.reduce_mean(input_tensor=tf.nn.l2_loss(f_y[i] - f_g[i])) * k2_ls[i]
+			disc_loss_layer += tf.reduce_mean(tf.nn.l2_loss(f_y[i] - f_g[i])) * k2_ls[i]
 		
 		# loss of the discriminator with real input
 		if use_LSGAN:
-			d_loss_y =  0.5* tf.reduce_mean( input_tensor=tf.square(disc - b))
-			d_loss_g =  0.5* tf.reduce_mean( input_tensor=tf.square(gen - a))
+			d_loss_y =  0.5* tf.reduce_mean( tf.square(disc - b))
+			d_loss_g =  0.5* tf.reduce_mean( tf.square(gen - a))
 		else:
 			if use_wgan_gp:
-				d_loss_y =  tf.reduce_mean(input_tensor=-disc)
-				d_loss_g =  tf.reduce_mean(input_tensor=gen)
+				d_loss_y =  tf.reduce_mean(-disc)
+				d_loss_g =  tf.reduce_mean(gen)
 			else:
-				d_loss_y= tf.reduce_mean(input_tensor=tf.nn.sigmoid_cross_entropy_with_logits(logits=disc, labels=tf.ones_like(disc)))
-				d_loss_g= tf.reduce_mean(input_tensor=tf.nn.sigmoid_cross_entropy_with_logits(logits=gen, labels=tf.zeros_like(gen)))
+				d_loss_y= tf.reduce_mean(tf.nn.sigmoid_cross_entropy_with_logits(logits=disc, labels=tf.ones_like(disc)))
+				d_loss_g= tf.reduce_mean(tf.nn.sigmoid_cross_entropy_with_logits(logits=gen, labels=tf.zeros_like(gen)))
 		
 		disc_loss = d_loss_y * weight_dld + d_loss_g
 		#loss of the discriminator with input from generator
 		
 	gen_l2_loss = tf.nn.l2_loss(y_in - gen_y)
-	l1_loss = tf.reduce_mean(input_tensor=tf.abs(y_in - gen_y)) #use mean to normalize w.r.t. output dims. tf.reduce_mean(tf.abs(y - gen_part))
+	l1_loss = tf.reduce_mean(tf.abs(y_in - gen_y)) #use mean to normalize w.r.t. output dims. tf.reduce_mean(tf.abs(y - gen_part))
 
 	if use_LSGAN:
-		g_loss_d = 0.5* tf.reduce_mean(input_tensor=tf.square(gen - c))
+		g_loss_d = 0.5* tf.reduce_mean(tf.square(gen - c))
 	else: 	
 		if use_wgan_gp:
-			g_loss_d = tf.reduce_mean(input_tensor=-gen)
+			g_loss_d = tf.reduce_mean(-gen)
 		else:
-			g_loss_d = tf.reduce_mean(input_tensor=tf.nn.sigmoid_cross_entropy_with_logits(logits=gen, labels=tf.ones_like(gen)))
+			g_loss_d = tf.reduce_mean(tf.nn.sigmoid_cross_entropy_with_logits(logits=gen, labels=tf.ones_like(gen)))
 	
 	if use_spatialdisc:
 		# setup gradient loss
 		if use_wgan_gp:
 			if upsampling_mode == 2:
-				lerp_factor = tf.random.uniform([tf.shape(input=gen_y)[0], 1], 0.0, 1.0)
+				lerp_factor = tf.random_uniform([tf.shape(gen_y)[0], 1], 0.0, 1.0)
 			elif upsampling_mode == 1 or upsampling_mode == 3:
-				lerp_factor = tf.random.uniform([tf.shape(input=gen_y)[0], 1, 1, 1], 0.0, 1.0)
+				lerp_factor = tf.random_uniform([tf.shape(gen_y)[0], 1, 1, 1], 0.0, 1.0)
 			elif upsampling_mode == 0:
-				lerp_factor = tf.random.uniform([tf.shape(input=y_in)[0], 1], 0.0, 1.0)
+				lerp_factor = tf.random_uniform([tf.shape(y_in)[0], 1], 0.0, 1.0)
 				
 			y_gp_d = lerp_factor * y_in + (1 - lerp_factor) * gen_y			
 			d_out, _ = disc_model(y_gp_d, x_disc, use_batch_norm=bn, reuse = True, currentUpres = int(round(math.log(upRes, 2))), train=train, percentage = percentage)
-			d_out_loss = tf.reduce_mean(input_tensor=d_out)
+			d_out_loss = tf.reduce_mean(d_out)
 			
-			grads_d = tf.gradients(ys=d_out_loss, xs=[y_gp_d, x_disc])[0]	
-			grads_d = tf.sqrt(tf.reduce_sum(input_tensor=tf.square(grads_d + 1e-4), axis = 1))		
-			grad_penalty_d = tf.reduce_mean(input_tensor=wgan_lambda * tf.square(grads_d - wgan_target))
+			grads_d = tf.gradients(d_out_loss, [y_gp_d, x_disc])[0]	
+			grads_d = tf.sqrt(tf.reduce_sum(tf.square(grads_d + 1e-4), axis = 1))		
+			grad_penalty_d = tf.reduce_mean(wgan_lambda * tf.square(grads_d - wgan_target))
 		
-			epsilon_penalty_d = tf.reduce_mean(input_tensor=tf.square(disc))
+			epsilon_penalty_d = tf.reduce_mean(tf.square(disc))
 			disc_loss += epsilon_penalty_d * wgan_epsilon
 			disc_loss += grad_penalty_d
 						
 	gen_loss_complete = g_loss_d + l1_loss*kk + disc_loss_layer*kk2
 
-	update_ops = tf.compat.v1.get_collection(tf.compat.v1.GraphKeys.UPDATE_OPS)
+	update_ops = tf.get_collection(tf.GraphKeys.UPDATE_OPS)
 	gen_update_ops = update_ops[:]
 	
 	#variables to be used in the different otimization steps
-	vars = tf.compat.v1.trainable_variables()
+	vars = tf.trainable_variables()
 	g_var = [var for var in vars if "g_" in var.name]
 	if use_spatialdisc:
 		dis_update_ops = update_ops[:]
@@ -1169,26 +1169,26 @@ if not outputOnly:
 			elif upsampling_mode == 0:
 				x_t_in = x_t
 			elif upsampling_mode == 1 or upsampling_mode == 3:
-				x_t_in = tf.concat((tf.slice(tf.reshape(y_t, shape = [-1, tileSizeHigh, tileSizeHigh, 2]), [0,0,0,1], [-1,tileSizeHigh, tileSizeHigh, 1]), tf.image.resize(tf.slice(tf.reshape(x_t, shape = [-1, tileSizeLow, tileSizeLow, n_inputChannels]),[0,0,0,0],[-1,tileSizeLow,tileSizeLow,n_inputChannels]), tf.constant([tileSizeHigh, tileSizeHigh], dtype= tf.int32), method=1)), axis = 3)
+				x_t_in = tf.concat((tf.slice(tf.reshape(y_t, shape = [-1, tileSizeHigh, tileSizeHigh, 2]), [0,0,0,1], [-1,tileSizeHigh, tileSizeHigh, 1]), tf.image.resize_images(tf.slice(tf.reshape(x_t, shape = [-1, tileSizeLow, tileSizeLow, n_inputChannels]),[0,0,0,0],[-1,tileSizeLow,tileSizeLow,n_inputChannels]), tf.constant([tileSizeHigh, tileSizeHigh], dtype= tf.int32), method=1)), axis = 3)
 				
 			gen_ts = gen_model(x_t_in,  reuse = True, use_batch_norm=bn, train=train, currentUpres = int(round(math.log(upRes, 2))), percentage = percentage)
 		
 		if(ADV_flag):		
 			# current upres factor 
-			upresFac = tf.pow(tf.constant(2,dtype=tf.int32), tf.cast( tf.math.ceil(percentage),dtype=tf.int32))
+			upresFac = tf.pow(tf.constant(2,dtype=tf.int32), tf.cast( tf.ceil(percentage),dtype=tf.int32))
 			if upsampling_mode == 2:
 				currentTileSizeX = upresFac * tf.constant(tileSizeLow, dtype = tf.int32)
 			elif upsampling_mode == 3 or upsampling_mode == 0 or upsampling_mode == 1:		
 				currentTileSizeX = tf.constant(tileSizeHigh, dtype = tf.int32)
 				
 			if upsampling_mode == 2 or upsampling_mode == 3 or upsampling_mode == 1:
-				vel_t = tf.reshape(tf.slice(tf.reshape(x_t, shape = [tf.shape(input=x_t)[0], tileSizeLow, tileSizeLow, 4]),[0,0,0,1],[-1, tileSizeLow, tileSizeLow, 3]), shape = [tf.shape(input=x_t)[0], tileSizeLow, tileSizeLow, 3])
+				vel_t = tf.reshape(tf.slice(tf.reshape(x_t, shape = [tf.shape(x_t)[0], tileSizeLow, tileSizeLow, 4]),[0,0,0,1],[-1, tileSizeLow, tileSizeLow, 3]), shape = [tf.shape(x_t)[0], tileSizeLow, tileSizeLow, 3])
 			elif upsampling_mode == 0:
-				vel_t = tf.reshape(tf.slice(tf.reshape(x_t, shape = [tf.shape(input=x_t)[0], tileSizeHigh, tileSizeLow, 5]),[0,0,0,1],[-1, tileSizeHigh, tileSizeLow, 3]), shape = [tf.shape(input=x_t)[0], tileSizeHigh, tileSizeLow, 3])
+				vel_t = tf.reshape(tf.slice(tf.reshape(x_t, shape = [tf.shape(x_t)[0], tileSizeHigh, tileSizeLow, 5]),[0,0,0,1],[-1, tileSizeHigh, tileSizeLow, 3]), shape = [tf.shape(x_t)[0], tileSizeHigh, tileSizeLow, 3])
 			
 			if dataDimension == 2:	
-				gen_ts = tf.reshape(gen_ts, shape=[tf.shape(input=x_t)[0], tileSizeHigh, tileSizeHigh,1])					
-				gen_ts = tf.image.resize(gen_ts, [currentTileSizeX, currentTileSizeX], method = 1)
+				gen_ts = tf.reshape(gen_ts, shape=[tf.shape(x_t)[0], tileSizeHigh, tileSizeHigh,1])					
+				gen_ts = tf.image.resize_images(gen_ts, [currentTileSizeX, currentTileSizeX], method = 1)
 				if not ADV_mode:
 					pos_array = tf.reshape(y_pos, shape=[-1, currentTileSizeX, currentTileSizeX, 2])
 					g_resampled = tensorResample(gen_ts, pos_array)			
@@ -1200,23 +1200,23 @@ if not outputOnly:
 				
 				# resize input slice to fit the temporal discriminator, only necessary if upsampling_mode == 2
 				if upsampling_mode == 2:
-					g_resampled = tf.image.resize(g_resampled, tf.constant([tileSizeHigh, tileSizeHigh], dtype= tf.int32), method=1) 
+					g_resampled = tf.image.resize_images(g_resampled, tf.constant([tileSizeHigh, tileSizeHigh], dtype= tf.int32), method=1) 
 				if useVelInTDisc:
-					g_resampled = tf.concat((g_resampled,tf.cast(upresFac,dtype=tf.float32)*tf.image.resize(vel_t, tf.constant([tileSizeHigh, tileSizeHigh], dtype = tf.int32), method = 0)), axis = 3)
+					g_resampled = tf.concat((g_resampled,tf.cast(upresFac,dtype=tf.float32)*tf.image.resize_images(vel_t, tf.constant([tileSizeHigh, tileSizeHigh], dtype = tf.int32), method = 0)), axis = 3)
 			
 		g_resampled = tf.reshape(g_resampled, shape = [-1, n_t, n_output])
-		g_resampled = tf.transpose(a=g_resampled, perm=[0, 2, 1]) # batch, n_output, channels
+		g_resampled = tf.transpose(g_resampled, perm=[0, 2, 1]) # batch, n_output, channels
 
 		if (useTempoD):
 			disT_update_ops = []
 			# real input for disc
 			if (ADV_flag):
 				if upsampling_mode == 2:
-					y_resampled = tf.reshape(y_t, shape=[tf.shape(input=y_t)[0], currentTileSizeX, currentTileSizeX, 1])
+					y_resampled = tf.reshape(y_t, shape=[tf.shape(y_t)[0], currentTileSizeX, currentTileSizeX, 1])
 				elif upsampling_mode == 1 or upsampling_mode == 3:
-					y_resampled = tf.slice(tf.reshape(y_t, shape=[tf.shape(input=y_t)[0], currentTileSizeX, currentTileSizeX, 2]), [0,0,0,0], [-1, currentTileSizeX,currentTileSizeX,1])
+					y_resampled = tf.slice(tf.reshape(y_t, shape=[tf.shape(y_t)[0], currentTileSizeX, currentTileSizeX, 2]), [0,0,0,0], [-1, currentTileSizeX,currentTileSizeX,1])
 				elif upsampling_mode == 0:
-					y_resampled = tf.reshape(y_t, shape=[tf.shape(input=y_t)[0], tileSizeHigh, tileSizeHigh, 1])
+					y_resampled = tf.reshape(y_t, shape=[tf.shape(y_t)[0], tileSizeHigh, tileSizeHigh, 1])
 				
 				if not ADV_mode:
 					y_resampled = tensorResample(y_resampled, pos_array)
@@ -1225,17 +1225,17 @@ if not outputOnly:
 					y_resampled = GAN(y_resampled).advect(y_resampled, vel_t, flags, 0.5, ADV_mode, 1.0, startBz = (batch_size_disc // 3) * 3)		
 				
 				if upsampling_mode == 2:
-					y_resampled = tf.image.resize(y_resampled, tf.constant([tileSizeHigh, tileSizeHigh], dtype= tf.int32), method=1)
+					y_resampled = tf.image.resize_images(y_resampled, tf.constant([tileSizeHigh, tileSizeHigh], dtype= tf.int32), method=1)
 				if useVelInTDisc:
-					y_resampled = tf.concat((y_resampled, tf.cast(upresFac,dtype=tf.float32)*tf.image.resize(vel_t, tf.constant([tileSizeHigh, tileSizeHigh], dtype = tf.int32), method = 0)), axis = 3)
+					y_resampled = tf.concat((y_resampled, tf.cast(upresFac,dtype=tf.float32)*tf.image.resize_images(vel_t, tf.constant([tileSizeHigh, tileSizeHigh], dtype = tf.int32), method = 0)), axis = 3)
 			else:
 				y_resampled = y_t
 			y_resampled = tf.reshape(y_resampled, shape = [-1, n_t, n_output])
-			y_resampled = tf.transpose(a=y_resampled, perm=[0, 2, 1]) # batch, n_output, channels
+			y_resampled = tf.transpose(y_resampled, perm=[0, 2, 1]) # batch, n_output, channels
 							
 			gen_s = disc_time_model(g_resampled, use_batch_norm=bn, train=train, reuse = False, currentUpres = int(round(math.log(upRes, 2))), percentage = percentage, gstr = gdrop_str_t)
 			
-			update_ops = tf.compat.v1.get_collection(tf.compat.v1.GraphKeys.UPDATE_OPS)
+			update_ops = tf.get_collection(tf.GraphKeys.UPDATE_OPS)
 			
 			for update_op in update_ops:
 				if ("/g_" in update_op.name) and ("generator" in update_op.name) and (not ( update_op in gen_update_ops )):
@@ -1248,56 +1248,56 @@ if not outputOnly:
 				
 			disc_s = disc_time_model(y_resampled, use_batch_norm=bn, train=train, reuse = True, currentUpres = int(round(math.log(upRes, 2))), percentage = percentage, gstr = gdrop_str_t)				
 			
-			update_ops = tf.compat.v1.get_collection(tf.compat.v1.GraphKeys.UPDATE_OPS)
+			update_ops = tf.get_collection(tf.GraphKeys.UPDATE_OPS)
 			for update_op in update_ops:
 				if ("/t_" in update_op.name) and ("tempo-disc" in update_op.name) and (not ( update_op in disT_update_ops )):
 					disT_update_ops.append(update_op)
 							
 			if use_LSGAN or use_wgan_gp:			
-				t_sig_y = tf.reduce_mean(input_tensor=-disc_s)
-				t_sig_g = tf.reduce_mean(input_tensor=gen_s)
+				t_sig_y = tf.reduce_mean(-disc_s)
+				t_sig_g = tf.reduce_mean(gen_s)
 			else:							
-				t_sig_y = tf.reduce_mean(input_tensor=tf.nn.sigmoid(disc_s))
-				t_sig_g = tf.reduce_mean(input_tensor=tf.nn.sigmoid(gen_s))
+				t_sig_y = tf.reduce_mean(tf.nn.sigmoid(disc_s))
+				t_sig_g = tf.reduce_mean(tf.nn.sigmoid(gen_s))
 			
-			vars = tf.compat.v1.trainable_variables()
+			vars = tf.trainable_variables()
 			t_var = [var for var in vars if "t_" in var.name]
 			if use_LSGAN:
-				t_loss_y = 0.5* tf.reduce_mean( input_tensor=tf.square(disc_s - b))
-				t_loss_g = 0.5* tf.reduce_mean( input_tensor=tf.square(gen_s - a))
+				t_loss_y = 0.5* tf.reduce_mean( tf.square(disc_s - b))
+				t_loss_g = 0.5* tf.reduce_mean( tf.square(gen_s - a))
 			else:
 				if use_wgan_gp:
-					t_loss_y =  tf.reduce_mean(input_tensor=-disc_s)
-					t_loss_g =  tf.reduce_mean(input_tensor=gen_s)
+					t_loss_y =  tf.reduce_mean(-disc_s)
+					t_loss_g =  tf.reduce_mean(gen_s)
 				else:
 					# loss of the discriminator with real input
-					t_loss_y = tf.reduce_mean(input_tensor=tf.nn.sigmoid_cross_entropy_with_logits(logits=disc_s, labels=tf.ones_like(disc_s)))
+					t_loss_y = tf.reduce_mean(tf.nn.sigmoid_cross_entropy_with_logits(logits=disc_s, labels=tf.ones_like(disc_s)))
 					# loss of the discriminator with input from generator
-					t_loss_g = tf.reduce_mean(input_tensor=tf.nn.sigmoid_cross_entropy_with_logits(logits=gen_s, labels=tf.zeros_like(gen_s)))
+					t_loss_g = tf.reduce_mean(tf.nn.sigmoid_cross_entropy_with_logits(logits=gen_s, labels=tf.zeros_like(gen_s)))
 			
 			t_disc_loss = t_loss_y * weight_dld + t_loss_g
 			
 			if use_wgan_gp:								
-				t_lerp_factor = tf.random.uniform([tf.shape(input=g_resampled)[0],1,1], 0.0, 1.0)
+				t_lerp_factor = tf.random_uniform([tf.shape(g_resampled)[0],1,1], 0.0, 1.0)
 				y_gp_t = t_lerp_factor * y_resampled + (1 - t_lerp_factor) * g_resampled
 				t_out = disc_time_model(y_gp_t, use_batch_norm=bn, train=train, reuse = True, currentUpres = int(round(math.log(upRes, 2))), percentage = percentage)				
-				t_out_loss = tf.reduce_mean(input_tensor=t_out)
+				t_out_loss = tf.reduce_mean(t_out)
 								
-				grads_t = tf.gradients(ys=t_out_loss, xs=[y_gp_t])[0]	
-				grads_t = tf.sqrt(tf.reduce_sum(input_tensor=tf.square(grads_t + 1e-4), axis = 1))		
-				grad_penalty_t = tf.reduce_mean(input_tensor=wgan_lambda * tf.square(grads_t - wgan_target))
+				grads_t = tf.gradients(t_out_loss, [y_gp_t])[0]	
+				grads_t = tf.sqrt(tf.reduce_sum(tf.square(grads_t + 1e-4), axis = 1))		
+				grad_penalty_t = tf.reduce_mean(wgan_lambda * tf.square(grads_t - wgan_target))
 						
-				epsilon_penalty_t = tf.reduce_mean(input_tensor=tf.square(disc_s))
+				epsilon_penalty_t = tf.reduce_mean(tf.square(disc_s))
 				t_disc_loss += epsilon_penalty_t * wgan_epsilon
 				t_disc_loss += grad_penalty_t
 				
 			if use_LSGAN:
-				g_loss_t = 0.5 * tf.reduce_mean(input_tensor=tf.square(gen_s - c))		
+				g_loss_t = 0.5 * tf.reduce_mean(tf.square(gen_s - c))		
 			else: 	
 				if use_wgan_gp:
-					g_loss_t = tf.reduce_mean(input_tensor=-gen_s)			
+					g_loss_t = tf.reduce_mean(-gen_s)			
 				else:	
-					g_loss_t= tf.reduce_mean(input_tensor=tf.nn.sigmoid_cross_entropy_with_logits(logits=gen_s, labels=tf.ones_like(gen_s)))
+					g_loss_t= tf.reduce_mean(tf.nn.sigmoid_cross_entropy_with_logits(logits=gen_s, labels=tf.ones_like(gen_s)))
 			
 			gen_loss_complete = gen_loss_complete + kkt * g_loss_t
 			
@@ -1321,11 +1321,11 @@ if not outputOnly:
 					for i in range(0, z+2):
 						curr_t_var.extend([var for var in t_var if ("%i"%(2**(i))) in var.name and var not in curr_t_var])
 				if use_loss_scaling:									
-					t_disc_optimizer_adam.append(tf.compat.v1.train.AdamOptimizer(learning_rates_t[z], beta1=beta, beta2 = beta2,name = "t_adam_%i"%(2**(z+1))))
+					t_disc_optimizer_adam.append(tf.train.AdamOptimizer(learning_rates_t[z], beta1=beta, beta2 = beta2,name = "t_adam_%i"%(2**(z+1))))
 					t_grads.append(calc_gradients(t_disc_loss, curr_t_var, t_disc_optimizer_adam[z], ls_vars[2]))
 					t_disc_optimizer.append(apply_updates(t_grads[z], t_disc_optimizer_adam[z], ls_vars[2], z))
 				else:
-					t_disc_optimizer.append(tf.compat.v1.train.AdamOptimizer(learning_rates_t[z], beta1=beta, beta2 = beta2,name = "t_adam_%i"%(2**(z+1))).minimize(t_disc_loss, var_list=curr_t_var))
+					t_disc_optimizer.append(tf.train.AdamOptimizer(learning_rates_t[z], beta1=beta, beta2 = beta2,name = "t_adam_%i"%(2**(z+1))).minimize(t_disc_loss, var_list=curr_t_var))
 			
 		if use_spatialdisc:			
 			with tf.control_dependencies(dis_update_ops):
@@ -1337,11 +1337,11 @@ if not outputOnly:
 						curr_d_var.extend([var for var in d_var if ("%i"%(2**(i))) in var.name and var not in curr_d_var])
 				#optimizer for discriminator, uses combined loss, can only change variables of the disriminator
 				if use_loss_scaling:				
-					disc_optimizer_adam.append(tf.compat.v1.train.AdamOptimizer(learning_rates_d[z], beta1=beta, beta2 = beta2,name = "d_adam_%i"%(2**(z+1))))
+					disc_optimizer_adam.append(tf.train.AdamOptimizer(learning_rates_d[z], beta1=beta, beta2 = beta2,name = "d_adam_%i"%(2**(z+1))))
 					d_grads.append(calc_gradients(disc_loss, curr_d_var, disc_optimizer_adam[z], ls_vars[1]))
 					disc_optimizer.append(apply_updates(d_grads[z], disc_optimizer_adam[z], ls_vars[1], z))
 				else:
-					disc_optimizer_adam.append(tf.compat.v1.train.AdamOptimizer(learning_rates_d[z], beta1=beta, beta2 = beta2,name = "d_adam_%i"%(2**(z+1))))
+					disc_optimizer_adam.append(tf.train.AdamOptimizer(learning_rates_d[z], beta1=beta, beta2 = beta2,name = "d_adam_%i"%(2**(z+1))))
 					disc_optimizer.append(disc_optimizer_adam[z].minimize(disc_loss, var_list=curr_d_var))
 
 		with tf.control_dependencies(gen_update_ops): #gen_update_ops):
@@ -1352,26 +1352,26 @@ if not outputOnly:
 				for i in range(0, z+2):
 					curr_g_var.extend([var for var in g_var if ("%i"%(2**(i))) in var.name and var not in curr_g_var])
 			if use_loss_scaling:			
-				gen_optimizer_adam.append(tf.compat.v1.train.AdamOptimizer(learning_rates_g[z], beta1=beta, beta2 = beta2,name = "g_adam_%i"%(2**(z+1))))
+				gen_optimizer_adam.append(tf.train.AdamOptimizer(learning_rates_g[z], beta1=beta, beta2 = beta2,name = "g_adam_%i"%(2**(z+1))))
 				gen_optimizer_adam[z] = tf.contrib.opt.MovingAverageOptimizer(gen_optimizer_adam[z], 0.999)
 				# optimizer for generator, can only change variables of the generator,
 				g_grads.append(calc_gradients(gen_loss_complete, curr_g_var, gen_optimizer_adam[z], ls_vars[0]))
 				gen_optimizer.append(apply_updates(g_grads[z], gen_optimizer_adam[z], ls_vars[0], z))
 			else:
-				gen_optimizer_adam.append(tf.contrib.opt.MovingAverageOptimizer(tf.compat.v1.train.AdamOptimizer(learning_rates_g[z], beta1=beta, beta2 = beta2,name = "g_adam_%i"%(2**(z+1)))), 0.999)
+				gen_optimizer_adam.append(tf.contrib.opt.MovingAverageOptimizer(tf.train.AdamOptimizer(learning_rates_g[z], beta1=beta, beta2 = beta2,name = "g_adam_%i"%(2**(z+1)))), 0.999)
 				gen_optimizer.append(gen_optimizer_adam[z].minimize(gen_loss_complete, var_list=curr_g_var))
 			
 # create session and saver
-config = tf.compat.v1.ConfigProto(allow_soft_placement=True)
+config = tf.ConfigProto(allow_soft_placement=True)
 #config.gpu_options.per_process_gpu_memory_fraction = 0.7
-sess = tf.compat.v1.InteractiveSession(config = config)
-saver = tf.compat.v1.train.Saver(max_to_keep=maxToKeep)
+sess = tf.InteractiveSession(config = config)
+saver = tf.train.Saver(max_to_keep=maxToKeep)
 # second saver for estimation of moving average
 if not outputOnly:
 	saver_2 = gen_optimizer_adam[2].swapping_saver(max_to_keep=maxToKeep)
 # init vars or load model
 if load_model_test == -1:
-	sess.run(tf.compat.v1.global_variables_initializer())
+	sess.run(tf.global_variables_initializer())
 else:
 	saver.restore(sess, load_path)
 	if not outputOnly:
@@ -1382,53 +1382,53 @@ if not outputOnly :
 	# create a summary to monitor cost tensor
 	#training losses
 	if use_spatialdisc:
-		lossTrain_disc  = tf.compat.v1.summary.scalar("discriminator-loss train",     disc_loss)
-		lossTrain_gen  = tf.compat.v1.summary.scalar("generator-loss train",     g_loss_d)
+		lossTrain_disc  = tf.summary.scalar("discriminator-loss train",     disc_loss)
+		lossTrain_gen  = tf.summary.scalar("generator-loss train",     g_loss_d)
 
 	#testing losses
 	if use_spatialdisc:
-		lossTest_disc_disc   = tf.compat.v1.summary.scalar("discriminator-loss test real", d_loss_y)
-		lossTest_disc_gen   = tf.compat.v1.summary.scalar("discriminator-loss test generated", d_loss_g)
-		lossTest_disc = tf.compat.v1.summary.scalar("discriminator-loss test", disc_loss)
-		lossTest_gen   = tf.compat.v1.summary.scalar("generator-loss test", g_loss_d)
+		lossTest_disc_disc   = tf.summary.scalar("discriminator-loss test real", d_loss_y)
+		lossTest_disc_gen   = tf.summary.scalar("discriminator-loss test generated", d_loss_g)
+		lossTest_disc = tf.summary.scalar("discriminator-loss test", disc_loss)
+		lossTest_gen   = tf.summary.scalar("generator-loss test", g_loss_d)
 
 	#discriminator output [0,1] for real input
 	if use_spatialdisc:
-		outTrain_disc_real = tf.compat.v1.summary.scalar("discriminator-out train", d_sig_y)
-		outTrain_disc_gen = tf.compat.v1.summary.scalar("generator-out train", d_sig_g)
+		outTrain_disc_real = tf.summary.scalar("discriminator-out train", d_sig_y)
+		outTrain_disc_gen = tf.summary.scalar("generator-out train", d_sig_g)
 
 	#discriminator output [0,1] for generated input
 	if use_spatialdisc:
-		outTest_disc_real = tf.compat.v1.summary.scalar("discriminator-out test", d_sig_y)
-		outTest_disc_gen = tf.compat.v1.summary.scalar("generator-out test", d_sig_g)
+		outTest_disc_real = tf.summary.scalar("discriminator-out test", d_sig_y)
+		outTest_disc_gen = tf.summary.scalar("generator-out test", d_sig_g)
 	
 	if(useTempoD): # all temporal losses
 		# training losses， discriminator, generator
-		lossTrain_disc_t = tf.compat.v1.summary.scalar("T discriminator-loss train", t_disc_loss)
-		lossTrain_gen_t = tf.compat.v1.summary.scalar("T generator-loss train", g_loss_t)
+		lossTrain_disc_t = tf.summary.scalar("T discriminator-loss train", t_disc_loss)
+		lossTrain_gen_t = tf.summary.scalar("T generator-loss train", g_loss_t)
 		
 		# testing losses, discriminator( positive, negative ), generator
-		lossTest_disc_disc_t = tf.compat.v1.summary.scalar("T discriminator-loss test real", t_loss_y)
-		lossTest_disc_gen_t = tf.compat.v1.summary.scalar("T discriminator-loss test generated", t_loss_g)
-		lossTest_disc_t = tf.compat.v1.summary.scalar("T discriminator-loss test", t_disc_loss)
-		lossTest_gen_t = tf.compat.v1.summary.scalar("T generator-loss test", g_loss_t)
+		lossTest_disc_disc_t = tf.summary.scalar("T discriminator-loss test real", t_loss_y)
+		lossTest_disc_gen_t = tf.summary.scalar("T discriminator-loss test generated", t_loss_g)
+		lossTest_disc_t = tf.summary.scalar("T discriminator-loss test", t_disc_loss)
+		lossTest_gen_t = tf.summary.scalar("T generator-loss test", g_loss_t)
 
 		# discriminator output [0,1] for real input, during training
-		outTrain_disc_real_t = tf.compat.v1.summary.scalar("T discriminator-out train", t_sig_y)
+		outTrain_disc_real_t = tf.summary.scalar("T discriminator-out train", t_sig_y)
 		# discriminator output [0,1] for generated input
-		outTrain_disc_gen_t = tf.compat.v1.summary.scalar("T generator-out train", t_sig_g)
+		outTrain_disc_gen_t = tf.summary.scalar("T generator-out train", t_sig_g)
 
 		# discriminator output [0,1] for real input, during testing
-		outTest_disc_real_t = tf.compat.v1.summary.scalar("T discriminator-out test",  t_sig_y)
+		outTest_disc_real_t = tf.summary.scalar("T discriminator-out test",  t_sig_y)
 		# discriminator output [0,1] for generated input
-		outTest_disc_gen_t = tf.compat.v1.summary.scalar("T generator-out test",  t_sig_g)
+		outTest_disc_gen_t = tf.summary.scalar("T generator-out test",  t_sig_g)
 	
 	if (useTempoL2):  # all temporal losses
-		lossTrain_gen_t_l = tf.compat.v1.summary.scalar("T generator-loss train l2", tl_gen_loss)
-		lossTest_gen_t_l = tf.compat.v1.summary.scalar("T generator-loss test l2", tl_gen_loss)
+		lossTrain_gen_t_l = tf.summary.scalar("T generator-loss train l2", tl_gen_loss)
+		lossTest_gen_t_l = tf.summary.scalar("T generator-loss test l2", tl_gen_loss)
 
-	merged_summary_op = tf.compat.v1.summary.merge_all()
-	summary_writer    = tf.compat.v1.summary.FileWriter(test_path, sess.graph)
+	merged_summary_op = tf.summary.merge_all()
+	summary_writer    = tf.summary.FileWriter(test_path, sess.graph)
 
 save_no = 0
 image_no = 0
@@ -1687,8 +1687,8 @@ def generate3DUniForNewNetwork(imageindex = 0, outPath = '../', inputPer = 3.0, 
 	end = time.time()
 	print("time for interp low res: {0:.6f}".format(end-start))
 	batch_sz_out = 2
-	options = tf.compat.v1.RunOptions(trace_level=tf.compat.v1.RunOptions.FULL_TRACE)
-	run_metadata = tf.compat.v1.RunMetadata()
+	options = tf.RunOptions(trace_level=tf.RunOptions.FULL_TRACE)
+	run_metadata = tf.RunMetadata()
 	start = time.time()
 	for j in range(0,batch_xs_in.shape[0]//batch_sz_out):
 		if upsampling_mode == 2:
@@ -1781,7 +1781,7 @@ def generate3DUniForNewNetwork(imageindex = 0, outPath = '../', inputPer = 3.0, 
 		
 # copy adam variables between growing stages
 def copyAdamVariables(curr_upres):
-	vars = tf.compat.v1.global_variables()
+	vars = tf.global_variables()
 	copy_vars = []
 	paste_vars = vars
 	tempName = "adam_%i"%curr_upres
@@ -1798,7 +1798,7 @@ def copyAdamVariables(curr_upres):
 			if tempName1 == var_paste.name or tempName2 == var_paste.name:
 				var_paste.assign(var)
 				output_vars.append(var_paste)
-	init_new_vars = tf.compat.v1.variables_initializer(output_vars)
+	init_new_vars = tf.variables_initializer(output_vars)
 	sess.run(init_new_vars)
 	
 def saveModel(cost, exampleOut=-1, imgPath = test_path):
@@ -1981,8 +1981,8 @@ if not outputOnly and trainGAN:
 						
 			run_options = None; run_metadata = None
 			if saveMD:
-				run_options = tf.compat.v1.RunOptions(trace_level=tf.compat.v1.RunOptions.FULL_TRACE)
-				run_metadata = tf.compat.v1.RunMetadata()
+				run_options = tf.RunOptions(trace_level=tf.RunOptions.FULL_TRACE)
+				run_metadata = tf.RunMetadata()
 			# TRAIN MODEL
 			#discriminator variables; with real and generated input
 				

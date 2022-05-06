@@ -318,7 +318,7 @@ if not outputOnly:
 #exit(1)
 print("Random seed: {}".format(randSeed))
 np.random.seed(randSeed)
-tf.compat.v1.set_random_seed(randSeed)
+tf.set_random_seed(randSeed)
 
 if not outputOnly and cropOverlap>0:
 	print("Error - dont use cropOverlap != 0 for training...")
@@ -400,7 +400,7 @@ def save_img_3d(out_path, img): # y ↓ x →， z ↓ x →, z ↓ y →，3 in
 # pos shape (batch, ..., res_x2, res_x1, dim)
 def tensorResample(value, pos, flags = None, name='Resample'):
 
-	with tf.compat.v1.name_scope(name) as scope:
+	with tf.name_scope(name) as scope:
 		pos_shape = pos.get_shape().as_list()
 		dim = len(pos_shape) - 2  # batch and channels are ignored
 		assert (dim == pos_shape[-1])
@@ -425,12 +425,12 @@ def tensorResample(value, pos, flags = None, name='Resample'):
 				condition_list = [bool(axis_x & int(pow(2, i))) for i in range(dim)]
 				condition_ = (_broadcaster > 0) & condition_list
 				axis_idx = tf.cast(
-					tf.compat.v1.where(condition_, ceils, floors),
+					tf.where(condition_, ceils, floors),
 					tf.int32)
 
 				# only support linear interpolation...
 				axis_wei = 1.0 - tf.abs((pos-0.5) - tf.cast(axis_idx, tf.float32))  # shape (..., res_x2, res_x1, dim)			
-				axis_wei = tf.reduce_prod(input_tensor=axis_wei, axis=-1, keepdims=True)
+				axis_wei = tf.reduce_prod(axis_wei, axis=-1, keep_dims=True)
 				
 				cell_weight_list.append(axis_wei)  # single scalar(..., res_x2, res_x1, 1)
 				first_idx = tf.ones_like(axis_wei, dtype=tf.int32)
@@ -445,17 +445,17 @@ def tensorResample(value, pos, flags = None, name='Resample'):
 
 
 #input for gen
-x = tf.compat.v1.placeholder(tf.float32, shape=[None, n_input])
+x = tf.placeholder(tf.float32, shape=[None, n_input])
 #reference input for disc
-x_disc = tf.compat.v1.placeholder(tf.float32, shape=[None, n_input])
+x_disc = tf.placeholder(tf.float32, shape=[None, n_input])
 #real input for disc
-y = tf.compat.v1.placeholder(tf.float32, shape=[None, n_output])
-kk = tf.compat.v1.placeholder(tf.float32)
-kk2 = tf.compat.v1.placeholder(tf.float32)
-kkt = tf.compat.v1.placeholder(tf.float32)
-kktl = tf.compat.v1.placeholder(tf.float32)
+y = tf.placeholder(tf.float32, shape=[None, n_output])
+kk = tf.placeholder(tf.float32)
+kk2 = tf.placeholder(tf.float32)
+kkt = tf.placeholder(tf.float32)
+kktl = tf.placeholder(tf.float32)
 #keep probablity for dropout
-keep_prob = tf.compat.v1.placeholder(tf.float32)
+keep_prob = tf.placeholder(tf.float32)
 
 print("x: {}".format(x.get_shape()))
 # --- main graph setup ---
@@ -531,7 +531,7 @@ def resBlock(gan, inp, s1,s2, reuse, use_batch_norm, filter_size=3):
 def gen_resnet(_in, reuse=False, use_batch_norm=False, train=None):
 	global rbId
 	print("\n\tGenerator (resize-resnett3-deep)")
-	with tf.compat.v1.variable_scope("generator", reuse=reuse) as scope:
+	with tf.variable_scope("generator", reuse=reuse) as scope:
 		if dataDimension == 2:
 			if upsampling_mode == 2:
 				_in = tf.reshape(_in, shape=[-1, tileSizeLow, tileSizeLow, n_inputChannels]) #NHWC
@@ -579,10 +579,10 @@ def disc_binclass(in_low, in_high, reuse=False, use_batch_norm=False, train=None
 	#use_batch_norm: bool, if true batch norm is used in all but the first con layers
 	#train: if use_batch_norm, tf bool placeholder
 	print("\n\tDiscriminator (conditional binary classifier)")
-	with tf.compat.v1.variable_scope("discriminator", reuse=reuse):
+	with tf.variable_scope("discriminator", reuse=reuse):
 		if dataDimension == 2:
 			#in_low,_,_ = tf.split(in_low,n_inputChannels,1)
-			shape = tf.shape(input=in_low)
+			shape = tf.shape(in_low)
 			in_low = tf.slice(in_low,[0,0],[shape[0],int(n_input/n_inputChannels)])
 			if upsampling_mode == 2:
 				in_low = GAN(tf.reshape(in_low, shape=[-1, tileSizeLow, tileSizeLow, 1])).max_depool(height_factor = upRes,width_factor=upRes) #NHWC
@@ -597,7 +597,7 @@ def disc_binclass(in_low, in_high, reuse=False, use_batch_norm=False, train=None
 			stride = [2]
 			stride2 = [2]
 		elif dataDimension == 3:
-			shape = tf.shape(input=in_low)
+			shape = tf.shape(in_low)
 			in_low = tf.slice(in_low,[0,0],[shape[0],int(n_input/n_inputChannels)])
 			in_low = GAN(tf.reshape(in_low, shape=[-1, tileSizeLow, tileSizeLow, tileSizeLow, 1])).max_depool(depth_factor = upRes,height_factor = upRes,width_factor = upRes) #NDHWC
 			in_high = tf.reshape(in_high, shape=[-1, tileSizeHigh, tileSizeHigh, tileSizeHigh, 1]) # dim D is not upscaled
@@ -631,7 +631,7 @@ def disc_binclass_cond_tempo(in_high, n_t_channels=3, reuse=False, use_batch_nor
 	# train: if use_batch_norm, tf bool placeholder
 	print("\n\tDiscriminator for Tempo (conditional binary classifier)")
 	print("\n\tTempo, nearby frames packed as channels, number %d" % n_t_channels)
-	with tf.compat.v1.variable_scope("discriminatorTempo", reuse=reuse):
+	with tf.variable_scope("discriminatorTempo", reuse=reuse):
 		if dataDimension == 2:
 			# in_low,_,_ = tf.split(in_low,n_inputChannels,1)
 			in_high = tf.reshape(in_high, shape=[-1, tileSizeHigh, tileSizeHigh, n_t_channels])
@@ -668,7 +668,7 @@ def disc_binclass_cond_tempo(in_high, n_t_channels=3, reuse=False, use_batch_nor
 def gen_test(_in, reuse=False, use_batch_norm=False, train=None):
 	global rbId
 	print("\n\tGenerator-test")
-	with tf.compat.v1.variable_scope("generator-test", reuse=reuse) as scope:
+	with tf.variable_scope("generator-test", reuse=reuse) as scope:
 		if dataDimension == 2:
 			_in = tf.reshape(_in, shape=[-1, tileSizeLow, tileSizeLow, n_inputChannels]) #NHWC
 			patchShape = [2,2]
@@ -687,17 +687,17 @@ def gen_test(_in, reuse=False, use_batch_norm=False, train=None):
 ############################################disc_test###############################################################
 def disc_test(in_low, in_high, reuse=False, use_batch_norm=False, train=None):
 	print("\n\tDiscriminator-test")
-	with tf.compat.v1.variable_scope("discriminator_test", reuse=reuse):
+	with tf.variable_scope("discriminator_test", reuse=reuse):
 		if dataDimension == 2:
 			#in_low,_,_ = tf.split(in_low,n_inputChannels,1)
-			shape = tf.shape(input=in_low)
+			shape = tf.shape(in_low)
 			in_low = tf.slice(in_low,[0,0],[shape[0],int(n_input/n_inputChannels)])
 			in_low = GAN(tf.reshape(in_low, shape=[-1, tileSizeLow, tileSizeLow, 1])).max_depool(height_factor = upRes,width_factor = upRes) #NHWC
 			in_high = tf.reshape(in_high, shape=[-1, tileSizeHigh, tileSizeHigh, 1])
 			filter=[4,4]
 			stride2 = [2]
 		elif dataDimension == 3:
-			shape = tf.shape(input=in_low)
+			shape = tf.shape(in_low)
 			in_low = tf.slice(in_low,[0,0],[shape[0],int(n_input/n_inputChannels)])
 			in_low = GAN(tf.reshape(in_low, shape=[-1, tileSizeLow, tileSizeLow, tileSizeLow, 1])).max_depool(depth_factor = upRes,height_factor = upRes,width_factor = upRes) #NDHWC
 			in_high = tf.reshape(in_high, shape=[-1, tileSizeHigh, tileSizeHigh, tileSizeHigh, 1]) # dim D is not upscaled
@@ -728,7 +728,7 @@ disc_time_model = disc_binclass_cond_tempo # tempo dis currently fixed
 #set up GAN structure
 bn=batch_norm
 #training or testing for batch norm
-train = tf.compat.v1.placeholder(tf.bool)
+train = tf.placeholder(tf.bool)
 
 if not outputOnly: #setup for training
 
@@ -747,17 +747,17 @@ sys.stdout.flush()
 if not outputOnly:
 	#for discriminator [0,1] output
 	if use_spatialdisc:
-		disc_sigmoid = tf.reduce_mean(input_tensor=tf.nn.sigmoid(disc))
-		gen_sigmoid = tf.reduce_mean(input_tensor=tf.nn.sigmoid(gen))
+		disc_sigmoid = tf.reduce_mean(tf.nn.sigmoid(disc))
+		gen_sigmoid = tf.reduce_mean(tf.nn.sigmoid(gen))
 
 		#loss of the discriminator with real input
-		disc_loss_disc = tf.reduce_mean(input_tensor=tf.nn.sigmoid_cross_entropy_with_logits(logits=disc, labels=tf.ones_like(disc)))
+		disc_loss_disc = tf.reduce_mean(tf.nn.sigmoid_cross_entropy_with_logits(logits=disc, labels=tf.ones_like(disc)))
 		#loss of the discriminator with input from generator
-		disc_loss_gen = tf.reduce_mean(input_tensor=tf.nn.sigmoid_cross_entropy_with_logits(logits=gen, labels=tf.zeros_like(gen)))
-		disc_loss_layer = k2_l1*tf.reduce_mean(input_tensor=tf.nn.l2_loss(dy1 - gy1)) + k2_l2*tf.reduce_mean(input_tensor=tf.nn.l2_loss(dy2 - gy2)) + k2_l3*tf.reduce_mean(input_tensor=tf.nn.l2_loss(dy3 - gy3)) + k2_l4*tf.reduce_mean(input_tensor=tf.nn.l2_loss(dy4 - gy4))
+		disc_loss_gen = tf.reduce_mean(tf.nn.sigmoid_cross_entropy_with_logits(logits=gen, labels=tf.zeros_like(gen)))
+		disc_loss_layer = k2_l1*tf.reduce_mean(tf.nn.l2_loss(dy1 - gy1)) + k2_l2*tf.reduce_mean(tf.nn.l2_loss(dy2 - gy2)) + k2_l3*tf.reduce_mean(tf.nn.l2_loss(dy3 - gy3)) + k2_l4*tf.reduce_mean(tf.nn.l2_loss(dy4 - gy4))
 		disc_loss = disc_loss_disc * weight_dld + disc_loss_gen
 		#loss of the generator
-		gen_loss = tf.reduce_mean(input_tensor=tf.nn.sigmoid_cross_entropy_with_logits(logits=gen, labels=tf.ones_like(gen)))
+		gen_loss = tf.reduce_mean(tf.nn.sigmoid_cross_entropy_with_logits(logits=gen, labels=tf.ones_like(gen)))
 	
 	else:
 		gen_loss = tf.zeros([1])
@@ -765,7 +765,7 @@ if not outputOnly:
 
 	#additional generator losses
 	gen_l2_loss = tf.nn.l2_loss(y - gen_part)
-	gen_l1_loss = tf.reduce_mean(input_tensor=tf.abs(y - gen_part)) #use mean to normalize w.r.t. output dims. tf.reduce_sum(tf.abs(y - gen_part))
+	gen_l1_loss = tf.reduce_mean(tf.abs(y - gen_part)) #use mean to normalize w.r.t. output dims. tf.reduce_sum(tf.abs(y - gen_part))
 
 	#uses sigmoid cross entropy and l1 - see cGAN paper
 	gen_loss_complete = gen_loss + gen_l1_loss*kk + disc_loss_layer*kk2
@@ -774,16 +774,16 @@ if not outputOnly:
 	lr_global_step = tf.Variable(0, trainable=False)
 	learning_rate_scalar = learning_rate
 	if decayLR:
-		learning_rate = tf.compat.v1.train.polynomial_decay(learning_rate, lr_global_step, trainingEpochs//2, learning_rate_scalar*0.05, power=1.1)
+		learning_rate = tf.train.polynomial_decay(learning_rate, lr_global_step, trainingEpochs//2, learning_rate_scalar*0.05, power=1.1)
 
-	update_ops = tf.compat.v1.get_collection(tf.compat.v1.GraphKeys.UPDATE_OPS)
+	update_ops = tf.get_collection(tf.GraphKeys.UPDATE_OPS)
 	gen_update_ops = update_ops[:]
 	ori_gen_update_ops = update_ops[:]
 	pre_update_ops = update_ops[:]
 	#print(update_ops)
 
 	#variables to be used in the different otimization steps
-	vars = tf.compat.v1.trainable_variables()
+	vars = tf.trainable_variables()
 	g_var = [var for var in vars if "g_" in var.name]
 	if use_spatialdisc:
 		dis_update_ops = update_ops[:]
@@ -799,10 +799,10 @@ if not outputOnly:
 		if(dataDimension == 3): # have to use a second GPU!
 			device_str = '/device:GPU:1'
 		with tf.device(device_str): 
-			x_t = tf.compat.v1.placeholder(tf.float32, shape=[None, n_input])
+			x_t = tf.placeholder(tf.float32, shape=[None, n_input])
 			gen_part_t = gen_model(x_t, reuse=True, use_batch_norm=bn, train=train)
 		if(ADV_flag):
-			y_pos = tf.compat.v1.placeholder(tf.float32, shape=[None, n_output * dataDimension])
+			y_pos = tf.placeholder(tf.float32, shape=[None, n_output * dataDimension])
 			if dataDimension == 2:
 				gen_part_t_shape = tf.reshape(gen_part_t, shape=[-1, tileSizeHigh, tileSizeHigh, 1])
 				pos_array = tf.reshape(y_pos, shape=[-1, tileSizeHigh, tileSizeHigh, 2])
@@ -813,24 +813,24 @@ if not outputOnly:
 			gen_part_t = tensorResample(gen_part_t_shape, pos_array)
 						
 		gen_part_t = tf.reshape(gen_part_t, shape = [-1, n_t, n_output])
-		gen_part_t = tf.transpose(a=gen_part_t, perm=[0, 2, 1]) # batch, n_output, channels
+		gen_part_t = tf.transpose(gen_part_t, perm=[0, 2, 1]) # batch, n_output, channels
 
 		if (useTempoL2): # l2 tempo_loss
-			update_ops = tf.compat.v1.get_collection(tf.compat.v1.GraphKeys.UPDATE_OPS)
+			update_ops = tf.get_collection(tf.GraphKeys.UPDATE_OPS)
 			#print(update_ops)
 			for update_op in update_ops:
 				if ("/g_" in update_op.name) and ("generator" in update_op.name) and (not ( update_op in gen_update_ops )):
 					gen_update_ops.append(update_op)
 			
 			gen_part_t_list = tf.unstack(gen_part_t, axis = -1) # should have n_t dim
-			tl_gen_loss = tf.reduce_mean( input_tensor=tf.square( gen_part_t_list[0] - gen_part_t_list[1] ) )
+			tl_gen_loss = tf.reduce_mean( tf.square( gen_part_t_list[0] - gen_part_t_list[1] ) )
 			for ti in range( 1, n_t-1 ):
-				tl_gen_loss = tl_gen_loss + tf.reduce_mean( input_tensor=tf.square( gen_part_t_list[ti] - gen_part_t_list[ti + 1] ) )
+				tl_gen_loss = tl_gen_loss + tf.reduce_mean( tf.square( gen_part_t_list[ti] - gen_part_t_list[ti + 1] ) )
 			gen_loss_complete = gen_loss_complete + kktl * tl_gen_loss
 			
 		if (useTempoD):
 			# real input for disc
-			y_t = tf.compat.v1.placeholder(tf.float32, shape=[None, n_output])
+			y_t = tf.placeholder(tf.float32, shape=[None, n_output])
 			if (ADV_flag):
 				if dataDimension == 2:
 					y_t_shape = tf.reshape(y_t, shape=[-1, tileSizeHigh, tileSizeHigh, 1])
@@ -841,11 +841,11 @@ if not outputOnly:
 			else:
 				y_tR = y_t
 			y_tR =tf.reshape(y_tR, shape = [-1, n_t, n_output])
-			y_tR = tf.transpose(a=y_tR, perm=[0, 2, 1]) # batch, n_output, channels
+			y_tR = tf.transpose(y_tR, perm=[0, 2, 1]) # batch, n_output, channels
 			
 			gen_t = disc_time_model(gen_part_t, n_t_channels = n_t, use_batch_norm=bn, train=train)
 			
-			update_ops = tf.compat.v1.get_collection(tf.compat.v1.GraphKeys.UPDATE_OPS)
+			update_ops = tf.get_collection(tf.GraphKeys.UPDATE_OPS)
 			#print(update_ops)
 			for update_op in update_ops:
 				if ("/g_" in update_op.name) and ("generator" in update_op.name) and (not ( update_op in gen_update_ops )):
@@ -859,61 +859,61 @@ if not outputOnly:
 			# discrimiinator for tempo only
 			disc_t = disc_time_model(y_tR, n_t_channels = n_t, reuse=True, use_batch_norm=bn, train=train)
 			
-			update_ops = tf.compat.v1.get_collection(tf.compat.v1.GraphKeys.UPDATE_OPS)
+			update_ops = tf.get_collection(tf.GraphKeys.UPDATE_OPS)
 			for update_op in update_ops:
 				if ("/t_" in update_op.name) and ("discriminatorTempo" in update_op.name):
 					disT_update_ops.append(update_op)
 					
-			t_disc_sigmoid = tf.reduce_mean(input_tensor=tf.nn.sigmoid(disc_t))
-			t_gen_sigmoid = tf.reduce_mean(input_tensor=tf.nn.sigmoid(gen_t))
-			vars = tf.compat.v1.trainable_variables()
+			t_disc_sigmoid = tf.reduce_mean(tf.nn.sigmoid(disc_t))
+			t_gen_sigmoid = tf.reduce_mean(tf.nn.sigmoid(gen_t))
+			vars = tf.trainable_variables()
 			t_var = [var for var in vars if "t_" in var.name]
 			# loss of the discriminator with real input
 			t_disc_loss_disc = tf.reduce_mean(
-				input_tensor=tf.nn.sigmoid_cross_entropy_with_logits(logits=disc_t, labels=tf.ones_like(disc_t)))
+				tf.nn.sigmoid_cross_entropy_with_logits(logits=disc_t, labels=tf.ones_like(disc_t)))
 			# loss of the discriminator with input from generator
 			t_disc_loss_gen = tf.reduce_mean(
-				input_tensor=tf.nn.sigmoid_cross_entropy_with_logits(logits=gen_t, labels=tf.zeros_like(gen_t)))
+				tf.nn.sigmoid_cross_entropy_with_logits(logits=gen_t, labels=tf.zeros_like(gen_t)))
 			t_disc_loss = t_disc_loss_disc * weight_dld + t_disc_loss_gen
 			
-			t_gen_loss = tf.reduce_mean(input_tensor=tf.nn.sigmoid_cross_entropy_with_logits(logits=gen_t, labels=tf.ones_like(gen_t)))
+			t_gen_loss = tf.reduce_mean(tf.nn.sigmoid_cross_entropy_with_logits(logits=gen_t, labels=tf.ones_like(gen_t)))
 			
 			gen_loss_complete = gen_loss_complete + kkt * t_gen_loss
 			
 			with tf.control_dependencies(disT_update_ops):
-				t_disc_optimizer = tf.compat.v1.train.AdamOptimizer(learning_rate, beta1=beta).minimize(t_disc_loss, var_list=t_var)
+				t_disc_optimizer = tf.train.AdamOptimizer(learning_rate, beta1=beta).minimize(t_disc_loss, var_list=t_var)
 				
 			with tf.control_dependencies(ori_gen_update_ops): #gen_update_ops):
 				# optimizer for generator, can only change variables of the generator,
-				ori_gen_optimizer = tf.compat.v1.train.AdamOptimizer(learning_rate, beta1=beta).minimize(ori_gen_loss_complete, var_list=g_var)
+				ori_gen_optimizer = tf.train.AdamOptimizer(learning_rate, beta1=beta).minimize(ori_gen_loss_complete, var_list=g_var)
 				
 		#print("disT_update_ops")
 		#print(disT_update_ops)
 	if use_spatialdisc:
 		with tf.control_dependencies(dis_update_ops):
 			#optimizer for discriminator, uses combined loss, can only change variables of the disriminator
-			disc_optimizer_adam = tf.compat.v1.train.AdamOptimizer(learning_rate, beta1=beta)
+			disc_optimizer_adam = tf.train.AdamOptimizer(learning_rate, beta1=beta)
 			disc_optimizer = disc_optimizer_adam.minimize(disc_loss, var_list=d_var)
 	#print("dis_update_ops")
 	#print(dis_update_ops)
 	with tf.control_dependencies(gen_update_ops): #gen_update_ops):
 		# optimizer for generator, can only change variables of the generator,
-		gen_optimizer = tf.compat.v1.train.AdamOptimizer(learning_rate, beta1=beta).minimize(gen_loss_complete, var_list=g_var)
+		gen_optimizer = tf.train.AdamOptimizer(learning_rate, beta1=beta).minimize(gen_loss_complete, var_list=g_var)
 	#print("gen_update_ops")
 	#print(gen_update_ops)
 	with tf.control_dependencies(pre_update_ops): #gen_update_ops):
-		pretrain_optimizer = tf.compat.v1.train.AdamOptimizer(learning_rate).minimize(gen_l2_loss, var_list=g_var)
+		pretrain_optimizer = tf.train.AdamOptimizer(learning_rate).minimize(gen_l2_loss, var_list=g_var)
 
 # create session and saver
-config = tf.compat.v1.ConfigProto(allow_soft_placement=True)
-sess = tf.compat.v1.InteractiveSession(config = config)
-saver = tf.compat.v1.train.Saver(max_to_keep=maxToKeep)
+config = tf.ConfigProto(allow_soft_placement=True)
+sess = tf.InteractiveSession(config = config)
+saver = tf.train.Saver(max_to_keep=maxToKeep)
 # saver = tf.train.Checkpoint()
 # load_path = r"C:\Work\22-04_multipassGAN\3ddata_gan_sliced\test_0004\model_1199.ckpt.data-00000-of-00001"
 
 # init vars or load model
 if load_model_test == -1:
-	sess.run(tf.compat.v1.global_variables_initializer())
+	sess.run(tf.global_variables_initializer())
 else:
 	saver.restore(sess, load_path)
 	print("Model restored from %s." % load_path)
@@ -922,53 +922,53 @@ if not outputOnly:
 	# create a summary to monitor cost tensor
 	#training losses
 	if use_spatialdisc:
-		lossTrain_disc  = tf.compat.v1.summary.scalar("discriminator-loss train",     disc_loss)
-		lossTrain_gen  = tf.compat.v1.summary.scalar("generator-loss train",     gen_loss)
+		lossTrain_disc  = tf.summary.scalar("discriminator-loss train",     disc_loss)
+		lossTrain_gen  = tf.summary.scalar("generator-loss train",     gen_loss)
 
 	#testing losses
 	if use_spatialdisc:
-		lossTest_disc_disc   = tf.compat.v1.summary.scalar("discriminator-loss test real", disc_loss_disc)
-		lossTest_disc_gen   = tf.compat.v1.summary.scalar("discriminator-loss test generated", disc_loss_gen)
-		lossTest_disc = tf.compat.v1.summary.scalar("discriminator-loss test", disc_loss)
-		lossTest_gen   = tf.compat.v1.summary.scalar("generator-loss test", gen_loss)
+		lossTest_disc_disc   = tf.summary.scalar("discriminator-loss test real", disc_loss_disc)
+		lossTest_disc_gen   = tf.summary.scalar("discriminator-loss test generated", disc_loss_gen)
+		lossTest_disc = tf.summary.scalar("discriminator-loss test", disc_loss)
+		lossTest_gen   = tf.summary.scalar("generator-loss test", gen_loss)
 
 	#discriminator output [0,1] for real input
 	if use_spatialdisc:
-		outTrain_disc_real = tf.compat.v1.summary.scalar("discriminator-out train", disc_sigmoid)
-		outTrain_disc_gen = tf.compat.v1.summary.scalar("generator-out train", gen_sigmoid)
+		outTrain_disc_real = tf.summary.scalar("discriminator-out train", disc_sigmoid)
+		outTrain_disc_gen = tf.summary.scalar("generator-out train", gen_sigmoid)
 
 	#discriminator output [0,1] for generated input
 	if use_spatialdisc:
-		outTest_disc_real = tf.compat.v1.summary.scalar("discriminator-out test", disc_sigmoid)
-		outTest_disc_gen = tf.compat.v1.summary.scalar("generator-out test", gen_sigmoid)
+		outTest_disc_real = tf.summary.scalar("discriminator-out test", disc_sigmoid)
+		outTest_disc_gen = tf.summary.scalar("generator-out test", gen_sigmoid)
 	
 	if(useTempoD): # all temporal losses
 		# training losses， discriminator, generator
-		lossTrain_disc_t = tf.compat.v1.summary.scalar("T discriminator-loss train", t_disc_loss)
-		lossTrain_gen_t = tf.compat.v1.summary.scalar("T generator-loss train", t_gen_loss)
+		lossTrain_disc_t = tf.summary.scalar("T discriminator-loss train", t_disc_loss)
+		lossTrain_gen_t = tf.summary.scalar("T generator-loss train", t_gen_loss)
 		
 		# testing losses, discriminator( positive, negative ), generator
-		lossTest_disc_disc_t = tf.compat.v1.summary.scalar("T discriminator-loss test real", t_disc_loss_disc)
-		lossTest_disc_gen_t = tf.compat.v1.summary.scalar("T discriminator-loss test generated", t_disc_loss_gen)
-		lossTest_disc_t = tf.compat.v1.summary.scalar("T discriminator-loss test", t_disc_loss)
-		lossTest_gen_t = tf.compat.v1.summary.scalar("T generator-loss test", t_gen_loss)
+		lossTest_disc_disc_t = tf.summary.scalar("T discriminator-loss test real", t_disc_loss_disc)
+		lossTest_disc_gen_t = tf.summary.scalar("T discriminator-loss test generated", t_disc_loss_gen)
+		lossTest_disc_t = tf.summary.scalar("T discriminator-loss test", t_disc_loss)
+		lossTest_gen_t = tf.summary.scalar("T generator-loss test", t_gen_loss)
 
 		# discriminator output [0,1] for real input, during training
-		outTrain_disc_real_t = tf.compat.v1.summary.scalar("T discriminator-out train", t_disc_sigmoid)
+		outTrain_disc_real_t = tf.summary.scalar("T discriminator-out train", t_disc_sigmoid)
 		# discriminator output [0,1] for generated input
-		outTrain_disc_gen_t = tf.compat.v1.summary.scalar("T generator-out train", t_gen_sigmoid)
+		outTrain_disc_gen_t = tf.summary.scalar("T generator-out train", t_gen_sigmoid)
 
 		# discriminator output [0,1] for real input, during testing
-		outTest_disc_real_t = tf.compat.v1.summary.scalar("T discriminator-out test", t_disc_sigmoid)
+		outTest_disc_real_t = tf.summary.scalar("T discriminator-out test", t_disc_sigmoid)
 		# discriminator output [0,1] for generated input
-		outTest_disc_gen_t = tf.compat.v1.summary.scalar("T generator-out test", t_gen_sigmoid)
+		outTest_disc_gen_t = tf.summary.scalar("T generator-out test", t_gen_sigmoid)
 	
 	if (useTempoL2):  # all temporal losses
-		lossTrain_gen_t_l = tf.compat.v1.summary.scalar("T generator-loss train l2", tl_gen_loss)
-		lossTest_gen_t_l = tf.compat.v1.summary.scalar("T generator-loss test l2", tl_gen_loss)
+		lossTrain_gen_t_l = tf.summary.scalar("T generator-loss train l2", tl_gen_loss)
+		lossTest_gen_t_l = tf.summary.scalar("T generator-loss test l2", tl_gen_loss)
 
-	merged_summary_op = tf.compat.v1.summary.merge_all()
-	summary_writer    = tf.compat.v1.summary.FileWriter(test_path, sess.graph)
+	merged_summary_op = tf.summary.merge_all()
+	summary_writer    = tf.summary.FileWriter(test_path, sess.graph)
 
 save_no = 0
 tileSizeHiCrop = upRes * cropTileSizeLow
@@ -1313,9 +1313,9 @@ if not outputOnly and trainGAN:
 
 			run_options = None; run_metadata = None
 			if saveMD:
-				run_options = tf.compat.v1.RunOptions(trace_level=tf.compat.v1.RunOptions.FULL_TRACE)
+				run_options = tf.RunOptions(trace_level=tf.RunOptions.FULL_TRACE)
 				#run_options = tf.RunOptions(trace_level=tf.RunOptions.FULL_TRACE, output_partition_graphs=True)
-				run_metadata = tf.compat.v1.RunMetadata()
+				run_metadata = tf.RunMetadata()
 
 
 			# TRAIN MODEL

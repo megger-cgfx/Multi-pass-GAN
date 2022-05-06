@@ -199,9 +199,9 @@ if not load_model_test_3 == -1:
 
 				
 # create session and saver
-config = tf.compat.v1.ConfigProto(allow_soft_placement=True)
+config = tf.ConfigProto(allow_soft_placement=True)
 #config.gpu_options.per_process_gpu_memory_fraction = 0.8
-sess = tf.compat.v1.InteractiveSession(config = config)
+sess = tf.InteractiveSession(config = config)
 
 def save_img(out_path, img):
 	img = np.clip(img * 255.0, 0, 255).astype(np.uint8)
@@ -215,7 +215,7 @@ def lerp(x, y, t):
 	return tf.add(x, (y - x) * tf.clip_by_value(t,0.0,1.0))
 
 def gaussian_noise_layer(input_layer, strength):  
-    noise = tf.random.normal(shape=tf.shape(input=input_layer), mean=0.0, stddev=1.0, dtype=tf.float32) 
+    noise = tf.random_normal(shape=tf.shape(input_layer), mean=0.0, stddev=1.0, dtype=tf.float32) 
     return input_layer + noise * (strength * tf.sqrt(tf.cast(input_layer.get_shape().as_list()[3], tf.float32)))
 	
 # set up GAN structure
@@ -239,7 +239,7 @@ def resBlock(gan, inp, s1, s2, reuse, use_batch_norm, name, filter_size=3):
 	return resUnit1
 	
 def growBlockGen(gan, inp, upres, fms, use_batch_norm, train, reuse, output = False, firstGen = True, filterSize = 3, first_nn_arch = False, use_res_net = True):
-	with tf.compat.v1.variable_scope("genBlock%d"%(upres), reuse=reuse) as scope:
+	with tf.variable_scope("genBlock%d"%(upres), reuse=reuse) as scope:
 		if firstGen:
 			if not usePixelShuffle:
 				inDepool = gan.avg_depool(mode = upsampleMode)
@@ -289,7 +289,7 @@ def growing_gen(_in, percentage, reuse=False, use_batch_norm=False, train=None, 
 	global rbId
 	print("\n\tGenerator (growing-sliced-resnett3-deep)")
 	
-	with tf.compat.v1.variable_scope("generator", reuse=reuse) as scope:
+	with tf.variable_scope("generator", reuse=reuse) as scope:
 		n_channels = n_inputChannels
 		if add_adj_idcs:
 			n_channels += 2
@@ -341,49 +341,49 @@ def growing_gen(_in, percentage, reuse=False, use_batch_norm=False, train=None, 
 
 gen_model = growing_gen
 
-x = tf.compat.v1.placeholder(tf.float32,[None,n_input], name = "x")
-y = tf.compat.v1.placeholder(tf.float32,[None,None], name = "y")
+x = tf.placeholder(tf.float32,[None,n_input], name = "x")
+y = tf.placeholder(tf.float32,[None,None], name = "y")
 
-train = tf.compat.v1.placeholder(tf.bool)
+train = tf.placeholder(tf.bool)
 # output percentage for full 8x model...
-percentage = tf.compat.v1.placeholder(tf.float32)
+percentage = tf.placeholder(tf.float32)
 
 # first generator
 x_in = x
 if not load_model_test_1 == -1:
-	with tf.compat.v1.variable_scope("gen_1", reuse=True) as scope:
-		sampler = gen_model(x_in, use_batch_norm=batch_norm, reuse = tf.compat.v1.AUTO_REUSE, currentUpres = int(round(math.log(upRes, 2))), train=False, percentage = percentage, output = True, firstGen = True, filterSize = filterSize_1, startFms = start_fms_1, maxFms = max_fms_1, add_adj_idcs = add_adj_idcs1, first_nn_arch = firstNNArch, use_res_net=use_res_net1)
+	with tf.variable_scope("gen_1", reuse=True) as scope:
+		sampler = gen_model(x_in, use_batch_norm=batch_norm, reuse = tf.AUTO_REUSE, currentUpres = int(round(math.log(upRes, 2))), train=False, percentage = percentage, output = True, firstGen = True, filterSize = filterSize_1, startFms = start_fms_1, maxFms = max_fms_1, add_adj_idcs = add_adj_idcs1, first_nn_arch = firstNNArch, use_res_net=use_res_net1)
 	
 # second generator
 if not load_model_test_2 == -1:
-	x_in_2 = tf.concat((tf.reshape(y, shape = [-1, tileSizeHigh, tileSizeHigh, 1]), tf.image.resize(tf.reshape(x, shape = [-1, tileSizeLow, tileSizeLow, n_inputChannels]), tf.constant([tileSizeHigh, tileSizeHigh], dtype= tf.int32), method=1)), axis = 3)
-	with tf.compat.v1.variable_scope("gen_2", reuse=True) as scope:
-		sampler_2 = gen_model(x_in_2, use_batch_norm=batch_norm, reuse = tf.compat.v1.AUTO_REUSE, currentUpres = int(round(math.log(upRes, 2))), train=False, percentage = percentage, output = True, firstGen = False, filterSize = filterSize_2, startFms = start_fms_2, maxFms = max_fms_2, add_adj_idcs = add_adj_idcs2, first_nn_arch = False, use_res_net=use_res_net2)
+	x_in_2 = tf.concat((tf.reshape(y, shape = [-1, tileSizeHigh, tileSizeHigh, 1]), tf.image.resize_images(tf.reshape(x, shape = [-1, tileSizeLow, tileSizeLow, n_inputChannels]), tf.constant([tileSizeHigh, tileSizeHigh], dtype= tf.int32), method=1)), axis = 3)
+	with tf.variable_scope("gen_2", reuse=True) as scope:
+		sampler_2 = gen_model(x_in_2, use_batch_norm=batch_norm, reuse = tf.AUTO_REUSE, currentUpres = int(round(math.log(upRes, 2))), train=False, percentage = percentage, output = True, firstGen = False, filterSize = filterSize_2, startFms = start_fms_2, maxFms = max_fms_2, add_adj_idcs = add_adj_idcs2, first_nn_arch = False, use_res_net=use_res_net2)
 	
 # second generator
 if not load_model_test_3 == -1:
-	x_in_3 = tf.concat((tf.reshape(y, shape = [-1, tileSizeHigh, tileSizeHigh, 1]), tf.image.resize(tf.reshape(x, shape = [-1, tileSizeLow, tileSizeLow, n_inputChannels]), tf.constant([tileSizeHigh, tileSizeHigh], dtype= tf.int32), method=1)), axis = 3)
-	with tf.compat.v1.variable_scope("gen_3", reuse=True) as scope:
-		sampler_3 = gen_model(x_in_3, use_batch_norm=batch_norm, reuse = tf.compat.v1.AUTO_REUSE, currentUpres = int(round(math.log(upRes, 2))), train=False, percentage = percentage, output = True, firstGen = False, filterSize = filterSize_3, startFms = start_fms_3, maxFms = max_fms_3, add_adj_idcs = add_adj_idcs3, first_nn_arch = False, use_res_net=use_res_net3)
+	x_in_3 = tf.concat((tf.reshape(y, shape = [-1, tileSizeHigh, tileSizeHigh, 1]), tf.image.resize_images(tf.reshape(x, shape = [-1, tileSizeLow, tileSizeLow, n_inputChannels]), tf.constant([tileSizeHigh, tileSizeHigh], dtype= tf.int32), method=1)), axis = 3)
+	with tf.variable_scope("gen_3", reuse=True) as scope:
+		sampler_3 = gen_model(x_in_3, use_batch_norm=batch_norm, reuse = tf.AUTO_REUSE, currentUpres = int(round(math.log(upRes, 2))), train=False, percentage = percentage, output = True, firstGen = False, filterSize = filterSize_3, startFms = start_fms_3, maxFms = max_fms_3, add_adj_idcs = add_adj_idcs3, first_nn_arch = False, use_res_net=use_res_net3)
 	
 if not load_model_test_1 == -1:
-	gen1vars = tf.compat.v1.get_collection(tf.compat.v1.GraphKeys.GLOBAL_VARIABLES, scope="gen_1")
+	gen1vars = tf.get_collection(tf.GraphKeys.GLOBAL_VARIABLES, scope="gen_1")
 	gen1dict = dict((var.name[6:len(var.name)-2],var) for var in gen1vars)
-	saver = tf.compat.v1.train.Saver(var_list = gen1dict)
+	saver = tf.train.Saver(var_list = gen1dict)
 	saver.restore(sess, load_path_1)
 	print("Model 1 restored from %s." % load_path_1)
 
 if not load_model_test_2 == -1:
-	gen2vars = tf.compat.v1.get_collection(tf.compat.v1.GraphKeys.GLOBAL_VARIABLES, scope="gen_2")
+	gen2vars = tf.get_collection(tf.GraphKeys.GLOBAL_VARIABLES, scope="gen_2")
 	gen2dict = dict((var.name[6:len(var.name)-2],var) for var in gen2vars)
-	saver = tf.compat.v1.train.Saver(var_list = gen2dict)
+	saver = tf.train.Saver(var_list = gen2dict)
 	saver.restore(sess, load_path_2)
 	print("Model 2 restored from %s." % load_path_2)
 
 if not load_model_test_3 == -1:
-	gen3vars = tf.compat.v1.get_collection(tf.compat.v1.GraphKeys.GLOBAL_VARIABLES, scope="gen_3")
+	gen3vars = tf.get_collection(tf.GraphKeys.GLOBAL_VARIABLES, scope="gen_3")
 	gen3dict = dict((var.name[6:len(var.name)-2],var) for var in gen3vars)
-	saver = tf.compat.v1.train.Saver(var_list = gen3dict)
+	saver = tf.train.Saver(var_list = gen3dict)
 	saver.restore(sess, load_path_3)
 	print("Model 3 restored from %s." % load_path_3)
 
@@ -439,7 +439,7 @@ def generate3DUniForNewNetwork(imageindex = 0, outPath = '../', inputPer = 3.0, 
 					
 		# start generating output of first network
 		batch_sz_out = 8
-		run_metadata = tf.compat.v1.RunMetadata()
+		run_metadata = tf.RunMetadata()
 		
 		start = time.time()
 		for j in range(0,batch_xs_in.shape[0]//batch_sz_out):
